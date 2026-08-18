@@ -1,43 +1,49 @@
 ---
 title: "Troubleshooting"
-description: "The handful of things that trip people up, and how to fix each one."
+description: "The handful of things that trip people up, and what each one actually means."
 weight: 40
 ---
 
-Most of these come down to network reality or how springer serves its data,
-not a bug. Fill this page out with the site-specific cases as you find them.
+Most of these are the site behaving the way it behaves rather than a bug.
 
-## Requests start failing or returning 429
+## `status challenged`
 
-springer rate-limits like any public site. springer already paces
-requests and retries the transient failures, but a hard limit still means
-backing off. Raise the delay between requests with `--rate` (for example
-`--rate 1s`), lower any concurrency you have set, and retry later. A burst of
-429 or 5xx responses is the site asking you to slow down, not a defect.
+The Fastly edge in front of `/search` served a client challenge instead of the page. Three things are worth knowing about it, all measured:
 
-## Nothing is found for something you expected
+- It is triggered by **volume**, at roughly twenty requests, not by the depth of the page or by the query.
+- It does **not clear by waiting**, so retrying in a minute gets you another one. spr never retries a challenge for exactly this reason.
+- It is scoped to **search only**. Article, journal, book and sitemap urls keep answering normally while search is challenged.
 
-The public surface is not the whole site. Some data sits behind a login, a
-region, or a page that only renders with JavaScript, and that part is not
-reachable without the right session. Check that the input is spelled the way the
-site uses it, try a broader query, and see whether the same thing is visible in
-a private browser window before assuming it is missing.
+Use `/search.rss` instead, which is not challenged and is the search path spr prefers anyway.
 
-## A command needs a session
+## `status restricted`
 
-Where a surface is gated, springer reads a cookie or token you supply
-rather than logging in for you. Pass it on the command that needs it and keep it
-out of your shell history. Commands that work without one stay anonymous.
+The publisher states `access=No`. This is not a failure and not something to work around: the metadata is real, it was printed, and the body is genuinely not being served to you. The exit code is 4 so a script can tell the difference.
+
+## `status wrong_kind` on a pdf url
+
+The pdf is behind a subscription. The url ran the cookie dance, got redirected across to the chapter page, and served html. A tool that reported this as success would be handing you an html file named `.pdf`.
+
+## Seven redirects
+
+Normal. Every first request runs a three hop cookie dance, and a restricted pdf url runs the whole thing twice on its way to the chapter page. The budget is ten. More than that is a genuine loop and is reported as one.
+
+## Requests seem slow
+
+They are paced on purpose: two seconds between requests to one host, five for search. `--pace` raises it. It does not lower it below one second, and passing a smaller value prints a line saying so.
+
+## A 429, or `X-RateLimit-Remaining` at zero
+
+An upstream is enforcing a budget it told us about in a header. spr reads those headers off live responses rather than assuming a number. Wait for the reset, which the message names, and raise `--pace` if you are going to be running for a while.
+
+## Nothing found for something you expected
+
+The public surface is not the whole site. Check the spelling the site itself uses, and check the same url in a private browser window before concluding it is missing. A missing work answers 404, which spr reports as `not_found` and exit 3, so an empty result and a wrong url are easy to tell apart.
 
 ## The binary is not on your PATH
 
-`go install` puts the binary in `$(go env GOPATH)/bin` (usually `~/go/bin`), and
-a release archive leaves it wherever you unpacked it. If your shell cannot find
-`springer`, add that directory to your `PATH`. See
-[installation](/getting-started/installation/).
+`go install` puts the binary in `$(go env GOPATH)/bin`, usually `~/go/bin`, and a release archive leaves it wherever you unpacked it. See [installation](/getting-started/installation/).
 
-## Seeing what springer actually did
+## Seeing what spr actually did
 
-When something behaves unexpectedly, `-v` adds per-request detail so you can see
-the URLs it hit and the responses it got. That is usually enough to tell a rate
-limit apart from a genuinely empty result.
+`--debug` prints one line per request on stderr: the code, the classification, the byte count, the hop count and the url. That is usually enough to tell a rate limit apart from a genuinely empty result.

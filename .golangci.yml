@@ -13,6 +13,21 @@ linters:
     - misspell
     - unconvert
 
+  settings:
+    errcheck:
+      # Writing to stdout and closing a response body are the two places where
+      # a checked error has nowhere useful to go. If stdout is a closed pipe the
+      # process is about to be signalled anyway, and a Close after the body has
+      # already been read fully or discarded is returning the state of a
+      # connection nobody is going to use again. Everything else is checked, and
+      # this list stays short on purpose.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (net/http.ResponseWriter).Write
+        - (io.Closer).Close
+
 formatters:
   enable:
     - gofmt

@@ -1,6 +1,6 @@
 ---
 title: "Search"
-description: "Search the springer documentation."
+description: "Search the spr documentation."
 layout: "search"
 weight: 90
 ExcludeSearch: true

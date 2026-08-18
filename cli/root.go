@@ -1,138 +1,153 @@
-// Package cli builds the springer command tree on top of the springer library.
+// Package cli is the cobra command tree for spr.
 package cli
 
 import (
 	"fmt"
-	"os"
+	"io"
+	"time"
 
-	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
-	"github.com/tamnd/springer-cli/springer"
+	"github.com/tamnd/springer-cli/spr"
 )
 
+// Version metadata, stamped at build time through -ldflags.
 var (
 	Version = "dev"
 	Commit  = "none"
 	Date    = "unknown"
 )
 
+// The product token names this build, so the linker stamped version has to
+// reach the spr package. -ldflags runs before init, so this sees the real one.
+func init() { spr.SetVersion(Version) }
+
+// Exit codes. Each one is a different thing for a script to do about it, which
+// is the only reason to have more than two.
 const (
-	exitError  = 1
-	exitUsage  = 2
-	exitNoData = 3
+	// CodeOK is a command that did what it was asked.
+	CodeOK = 0
+
+	// CodeUsage is a flag or an argument this tool does not understand. Nothing
+	// was fetched.
+	CodeUsage = 1
+
+	// CodeChallenged is the search surface answering with a client challenge
+	// and no fallback left. It is a rate rather than a refusal, so it is worth
+	// trying again later, which is why it is not the same code as a refusal.
+	CodeChallenged = 2
+
+	// CodeNoData is a page that was fetched and understood and had nothing in
+	// it. That is a page that changed shape, or a record that does not exist.
+	CodeNoData = 3
+
+	// CodeRestricted is the publisher stating access=No. The metadata was read
+	// and printed; only the body is missing. It is an exit code rather than an
+	// error so a script can tell, and it is not an error message because
+	// nothing went wrong.
+	CodeRestricted = 4
+
+	// CodeTransport is a network failure, a timeout, or a 5xx that outlived the
+	// retries.
+	CodeTransport = 5
+
+	// CodeRateLimited is an upstream saying, in a header, that the budget is
+	// spent. Waiting is the fix and the message says how long.
+	CodeRateLimited = 6
 )
 
+// ExitError carries a process exit code out of a command.
 type ExitError struct {
 	Code int
 	Err  error
 }
 
 func (e *ExitError) Error() string {
-	if e.Err != nil {
-		return e.Err.Error()
+	if e.Err == nil {
+		return ""
 	}
-	return fmt.Sprintf("exit %d", e.Code)
+	return e.Err.Error()
 }
+
+// Silent reports whether this failure has already said everything it has to
+// say. A restricted page and a challenge both print their result first and then
+// carry an exit code out, and printing "Error:" under output that is correct
+// would read as though the fetch had failed.
+func (e *ExitError) Silent() bool { return e.Err == nil }
 
 func (e *ExitError) Unwrap() error { return e.Err }
 
-func codeError(code int, err error) error { return &ExitError{Code: code, Err: err} }
+// ExitCode reports the exit code this failure carries.
+func (e *ExitError) ExitCode() int { return e.Code }
 
-type App struct {
-	client *springer.Client
-	cfg    springer.Config
+func exit(code int, err error) error { return &ExitError{Code: code, Err: err} }
 
-	output   string
-	fields   []string
-	noHeader bool
-	template string
-	limit    int
-	quiet    bool
+// globals are the flags every command shares.
+type globals struct {
+	pace    time.Duration
+	timeout time.Duration
+	retries int
+	cache   string
+	noCache bool
+	mailto  string
+	debug   bool
+	format  string
 }
 
-func Root() *cobra.Command {
-	app := &App{cfg: springer.DefaultConfig()}
+var g globals
 
+// Root builds the command tree.
+func Root() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "springer",
-		Short:         "Browse Springer Nature academic journals",
+		Use:   "spr",
+		Short: "A delightful command line for link.springer.com",
+		Long: "spr reads what link.springer.com publishes about works, journals, books and series,\n" +
+			"and records where each field came from.\n\n" +
+			"Every record carries an envelope naming the source that answered for each field, what\n" +
+			"was looked for and not found, and what was left unread.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			return app.setup()
-		},
 	}
 
-	pf := root.PersistentFlags()
-	pf.StringVarP(&app.output, "output", "o", "auto", "output: table|json|jsonl|csv|tsv|url|raw")
-	pf.StringSliceVar(&app.fields, "fields", nil, "comma-separated columns to include")
-	pf.BoolVar(&app.noHeader, "no-header", false, "omit header row in table/csv/tsv")
-	pf.StringVar(&app.template, "template", "", "Go text/template per record")
-	pf.IntVarP(&app.limit, "limit", "n", 0, "limit number of records (0 = command default)")
-	pf.BoolVarP(&app.quiet, "quiet", "q", false, "suppress progress on stderr")
-	pf.DurationVar(&app.cfg.Rate, "delay", app.cfg.Rate, "minimum spacing between requests")
-	pf.DurationVar(&app.cfg.Timeout, "timeout", app.cfg.Timeout, "per-request timeout")
-	pf.IntVar(&app.cfg.Retries, "retries", app.cfg.Retries, "retry attempts on 429/5xx")
-	pf.StringVar(&app.cfg.UserAgent, "user-agent", app.cfg.UserAgent, "User-Agent header")
+	f := root.PersistentFlags()
+	f.DurationVar(&g.pace, "pace", spr.DefaultPace, "interval between requests to one host, never below "+spr.PaceFloor.String())
+	f.DurationVar(&g.timeout, "timeout", 30*time.Second, "per request timeout")
+	f.IntVar(&g.retries, "retries", 2, "retries on a transport error or a 5xx, never on a challenge")
+	f.StringVar(&g.cache, "cache", spr.DefaultCacheDir(), "cache directory")
+	f.BoolVar(&g.noCache, "no-cache", false, "fetch every page fresh and store nothing")
+	f.StringVar(&g.mailto, "mailto", "", "contact address for the Crossref and OpenAlex polite pools")
+	f.BoolVar(&g.debug, "debug", false, "one line per request on stderr")
+	f.StringVarP(&g.format, "output", "o", "text", "output format: text or json")
 
 	root.AddCommand(
-		app.recentCmd(),
-		app.searchCmd(),
-		newVersionCmd(),
+		getCmd(),
+		versionCmd(),
+		cacheCmd(),
 	)
 	return root
 }
 
-func (a *App) setup() error {
-	if a.output == "" || a.output == "auto" {
-		if isatty.IsTerminal(os.Stdout.Fd()) {
-			a.output = string(FormatTable)
-		} else {
-			a.output = string(FormatJSONL)
-		}
+// client builds a client from the global flags. A pace under the floor is
+// accepted, applied as the floor, and reported, because refusing the run over
+// it would be worse and doing it silently would be a lie.
+func client(stderr io.Writer) *spr.Client {
+	pace := g.pace
+	if pace < spr.PaceFloor {
+		fmt.Fprintf(stderr, "spr: --pace %s is below the %s floor, using the floor\n", pace, spr.PaceFloor)
+		pace = spr.PaceFloor
 	}
-	if !Format(a.output).Valid() {
-		return codeError(exitUsage, fmt.Errorf("unknown output format %q", a.output))
+	dir := g.cache
+	if g.noCache {
+		dir = ""
 	}
-	a.client = springer.NewClient(a.cfg)
-	return nil
-}
-
-func (a *App) render(records any) error {
-	r := NewRenderer(os.Stdout, Format(a.output), a.fields, a.noHeader, a.template)
-	return r.Render(records)
-}
-
-func (a *App) renderOrEmpty(records any, n int) error {
-	if err := a.render(records); err != nil {
-		return err
+	opts := []spr.Option{
+		spr.WithPace(pace),
+		spr.WithTimeout(g.timeout),
+		spr.WithRetries(g.retries),
+		spr.WithCache(dir, spr.DefaultTTL),
+		spr.WithMailto(g.mailto),
 	}
-	if n == 0 {
-		return codeError(exitNoData, nil)
+	if g.debug {
+		opts = append(opts, spr.WithDebug(stderr))
 	}
-	return nil
-}
-
-func (a *App) progressf(format string, args ...any) {
-	if a.quiet {
-		return
-	}
-	_, _ = fmt.Fprintf(os.Stderr, format+"\n", args...)
-}
-
-func mapFetchErr(err error) error {
-	if err == nil {
-		return nil
-	}
-	if isNotFound(err) {
-		return codeError(exitNoData, err)
-	}
-	return codeError(exitError, err)
-}
-
-func (a *App) effectiveLimit(def int) int {
-	if a.limit > 0 {
-		return a.limit
-	}
-	return def
+	return spr.New(opts...)
 }

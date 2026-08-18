@@ -12,10 +12,10 @@ ARG TARGETPLATFORM
 
 # ca-certificates for HTTPS; tzdata for sane timestamps.
 RUN apk add --no-cache ca-certificates tzdata \
- && adduser -D -H -u 10001 springer
+ && adduser -D -H -u 10001 spr
 
-COPY $TARGETPLATFORM/springer /usr/bin/springer
+COPY $TARGETPLATFORM/spr /usr/bin/spr
 
-USER springer
+USER spr
 
-ENTRYPOINT ["/usr/bin/springer"]
+ENTRYPOINT ["/usr/bin/spr"]
