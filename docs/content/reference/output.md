@@ -78,6 +78,17 @@ There is no `missed` key on that record because nothing was missed, which is the
 
 Absent means absent. A field the page did not carry is left out of the json rather than emitted as `null`, so `.abstract == null` and no `abstract` key are the same answer, and a field in `missed` is the third case: it should have been there and something stopped it.
 
+## Provenance on a graph
+
+`spr graph` is the one command whose output is not a record, and it carries the same two keys in a different place. `via` and `tier` sit on every node and every edge rather than once in an envelope, because a graph walked over forty pages and enriched from two backends is a document where the question is never what produced this file, it is what produced this edge.
+
+```json
+{"from": "spr:work/10.1007/s10994-021-05946-3", "to": "spr:person/orcid/0000-0002-9944-4108",
+ "type": "authoredBy", "position": 1, "via": "jsonld:author[]", "tier": "html"}
+```
+
+The graph's own envelope keeps the seed url and the running byte count and not the url of every page read, since a list of fourteen hundred urls is a log rather than provenance. Under `--format nq` the tier becomes the fourth term of every quad, so the same question can be asked of a triple store.
+
 ## Seeing what it did
 
 `--debug` puts one line per request on stderr, which stays out of the pipe:

@@ -24,6 +24,7 @@ Run `spr <command> --help` for the full flag list on any command, and see [confi
 | `figures` | List a work's figures, or read one at full size |
 | `tables` | List a work's tables, or read one in full |
 | `sitemap` | Enumerate what the site publishes, from its own sitemaps |
+| `graph` | Walk from a seed and write the nodes and edges as a graph |
 | `crossref` | Read a work, its deposited reference list or a query from Crossref |
 | `openalex` | Read a work or a query from OpenAlex |
 | `cited-by` | List the works that cite this one, which this site has no page for |
@@ -452,6 +453,118 @@ The bill is computed from the index that was just fetched rather than from a fig
 `--resume` writes each shard's url to a state file under the cache directory as that shard finishes, keyed on the selection, so resuming a walk of the last three days never inherits the state of a walk of everything. A shard is marked only after every url in it has been printed, and a shard that did not answer is left unmarked and counted, so a resumed run comes back for it. `--resume` with `--no-cache` is a usage error rather than a run that quietly fails to resume.
 
 See the [enumerating the site](/guides/sitemaps/) guide for what the eight static maps hold and what a walk of everything costs.
+
+## `spr graph`
+
+```
+spr graph <seed>... [flags]
+```
+
+Reads a seed and everything it leads to, and writes the result as nodes and edges rather than as records. A seed is a DOI, a journal number, a path or a url, and more than one may be given.
+
+`--depth 0` reads the seed and stops, which is the default. Each further round follows the edges that lead to a page this tool can read: a work names its container, a journal leads to its volumes and issues page, a book leads to the works in its table of contents, and a series leads to the books it lists. A reference is followed only under `--follow-refs` and only when its DOI carries the `10.1007` prefix, because the others have no page at this publisher.
+
+| Flag | Meaning |
+|---|---|
+| `--depth` | How many rounds of following to do, and 0 reads the seed and stops |
+| `--format` | `json`, `jsonl`, `nt`, `nq`, `ttl`, `jsonld`, `graphml`, `gexf`, `dot`, `csv` |
+| `--projection` | `coauthor`, which the gexf writer computes, so it needs `--format gexf` |
+| `--dir` | Where the csv pair is written, which needs `--format csv` |
+| `--also` | Ask the open indexes about every work read: `crossref`, `openalex` |
+| `--cited-by` | Add this many citing works per work, which reads OpenAlex |
+| `--include-rails` | Turn the publisher's recommendation strip into `recommends` edges |
+| `--follow-refs` | Follow the references that carry this publisher's DOI prefix |
+| `--merge-names` | Merge a name keyed person into an ORCID keyed one on an exact name match |
+| `--limit` | Stop after this many pages |
+| `--dry-run` | Print what this walk would cost and make no requests |
+| `--yes` | Proceed with a walk that was billed rather than stopping |
+| `--resume` | Skip the pages an earlier run of this same walk finished |
+| `--merge` | Merge these graph files into the result, repeatable |
+
+```bash
+spr graph 10.1007/s10994-021-05946-3
+spr graph 10.1007/s10994-021-05946-3 --also crossref,openalex --format ttl
+spr graph 10994 --depth 1 --dry-run
+spr graph 10.1007/978-3-030-58607-2 --depth 1 --yes --format graphml > book.graphml
+spr graph 10.1007/s10994-021-05946-3 --format gexf --projection coauthor
+spr graph --merge one.json --merge two.json > both.json
+```
+
+Above twenty requests the bill is printed and nothing is fetched until you pass `--yes`. `--dry-run` prints the same bill and always stops.
+
+```console
+$ spr graph 10.1007/s10994-021-05946-3 --depth 1 --dry-run
+seed      https://link.springer.com/article/10.1007/s10994-021-05946-3
+depth 0   work page, the seed
+depth 1   1 journal page
+requests  2
+pace      1 request / 2s, floor 1 request / 1s
+estimate  2 seconds
+tier      html only, so no ror, funder or citedBy edges
+format    json
+```
+
+The bill is per depth because the shape is the point. One work and its journal is two requests, and one proceedings volume at depth 1 is forty. A single total with no breakdown cannot tell those apart until the walk is already running.
+
+The graph goes to stdout and everything else goes to stderr, including what was found:
+
+```console
+$ spr graph 10.1007/s10994-021-05946-3 --depth 1 > graph.json
+graph: 20 nodes and 24 edges from 2 pages
+graph: 1 issue, 1 volume, 1 work, 2 orgs, 2 publishers, 3 journals, 3 persons, 7 subjects
+graph: 1 partOf, 1 inVolume, 1 inIssue, 2 authoredBy, 1 editedBy, 2 affiliatedWith, 10 hasSubject, 2 publishedBy, 4 sameAs
+graph: 0 of 122 references resolved to an identifier and became edges, and 122 did not and stay in the record as text
+```
+
+That last line is the rule this command is built around. The page prints 122 references and none of them carries a DOI, so the html tier alone produces no `cites` edge at all. A reference that did not resolve to an identifier stays in the work record as the text it was and becomes nothing here, because an edge between a work and a guess is worse than no edge.
+
+`--also crossref` is what turns those references into edges, from the deposit rather than from the rendering:
+
+```console
+$ spr graph 10.1007/s10994-021-05946-3 --also crossref,openalex
+graph: 105 nodes and 107 edges from 1 page
+graph: 1 funder, 2 issues, 2 persons, 2 volumes, 21 subjects, 3 journals, 3 publishers, 4 orgs, 67 works
+graph: 2 partOf, 2 inVolume, 2 inIssue, 2 authoredBy, 4 affiliatedWith, 66 cites, 1 fundedBy, 21 hasSubject, 3 publishedBy, 4 sameAs
+graph: 3 backend requests to crossref and openalex
+graph: crossref: 66 of 122 deposited references carry a doi and became edges, and 56 do not and became nothing
+```
+
+Sixty six of the same 122 references carry a DOI in the deposit and fifty six still do not, so the count is reported both times rather than rounded up into a total.
+
+### Identity
+
+Every node's uri names the authority that identified it. A person known by an ORCID is `spr:person/orcid/0000-0002-9944-4108` and a person known only by the name a page printed is `spr:person/name/<hash>`, and those are two visibly different nodes rather than one node with a confidence score attached. Nothing in this tool merges them on its own.
+
+`--merge-names` is the explicit opt in. It merges a name keyed person into an ORCID keyed one only when the normalized name matches exactly one ORCID node, refuses when two ORCIDs answer to the same name, and records `mergedFrom` on the surviving node so the guess is visible in the output rather than lost in it.
+
+### Formats
+
+Ten writers, one graph. `json` is the only one that round trips, because it is the only one that holds every field of every node and edge, and it is what `--merge` reads.
+
+| Format | What it is for |
+|---|---|
+| `json` | The full graph, and the only form `--merge` can read back |
+| `jsonl` | One node or edge per line, for streaming into something else |
+| `nt`, `nq` | N-Triples and N-Quads, where the fourth term is the tier |
+| `ttl` | Turtle, with the eleven prefixes declared once at the top |
+| `jsonld` | JSON-LD with the context inline |
+| `graphml`, `gexf` | Gephi and yEd, with `--projection coauthor` on the gexf writer |
+| `dot` | Graphviz, for a graph small enough to look at |
+| `csv` | The Neo4j import pair, written to `--dir` as `nodes.csv` and `edges.csv` |
+
+The RDF forms borrow from schema.org, Dublin Core, PRISM, BIBO, FaBiO, CiTO and FRAPO, and mint exactly four terms of their own: `spr:recommends`, `spr:springerId`, `spr:accessStatement` and `spr:mergedFrom`. The four containment edges all map to `dcterms:isPartOf` and are told apart by the object's own `rdf:type`, and ordered authorship is a plain `rdf:List` under `bibo:authorList`, so neither of them needs a local term.
+
+`--format nq` puts the tier in the fourth position, as `<https://springer-cli.tamnd.com/ns/tier/html>`, so a store can be asked what the html tier alone said. Dropping the fourth column leaves valid N-Triples, which is why the two forms have the same number of lines.
+
+Two runs over the same pages write the same bytes. The writers sort first, GraphML and GEXF ids are derived from the uri rather than counted, and the blank node labels in the author lists come from the work uri, so a graph in version control has a diff worth reading.
+
+### Resuming and merging
+
+`--resume` writes each page's url to a state file under the cache directory as that page finishes, keyed on the seeds, the format and the depth, so a resumed walk of one book never inherits the state of a walk of a journal. A page that did not answer is left unmarked and counted, so a resumed run comes back for it. `--resume` with `--no-cache` is a usage error rather than a run that quietly fails to resume.
+
+`--merge` reads graphs an earlier run wrote and unions them into this one. Merging is on the uri, so the same node from two files is one node, and a merge of a file into itself changes nothing. A walk that fails halfway still writes what it read before the error goes out, because throwing away an hour of reading over one page that timed out would be the wrong way round.
+
+See the [building a graph](/guides/graphs/) guide for the node and edge tables and for what each tier adds.
 
 ## `spr crossref`
 

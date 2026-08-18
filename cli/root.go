@@ -129,6 +129,7 @@ func Root() *cobra.Command {
 		figuresCmd(),
 		tablesCmd(),
 		sitemapCmd(),
+		graphCmd(),
 		crossrefCmd(),
 		openalexCmd(),
 		citedByCmd(),

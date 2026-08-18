@@ -62,6 +62,28 @@ The join is on the normalized DOI and on nothing else. A backend result with no 
 
 If a backend is missing from the output entirely, it failed and said so on stderr. That is not a failed run, because two hosts answering is still worth having.
 
+## `spr graph` produced no `cites` edges
+
+Expected, on the html tier. The measured article prints 122 references and states a DOI for none of them, so there is nothing on the page to point a citation edge at, and a reference that did not resolve to an identifier deliberately becomes nothing rather than an edge to a guess. The count is printed both ways on stderr so the zero is never silent.
+
+`--also crossref` reads the deposit instead of the rendering and turns 66 of those same 122 into edges. `--cited-by` needs OpenAlex, because no page on this site knows who cites it.
+
+## `spr graph` stopped and asked for `--yes`
+
+The walk was billed above twenty requests. The bill it printed is per depth, so the line that is larger than you expected is the one to change: `--depth 1` on a work is one extra request and on a proceedings volume it is forty. Lower `--depth`, add `--limit`, or pass `--yes` if forty one requests is what you meant. `--dry-run` prints the same bill and never fetches.
+
+## Two person nodes for what is obviously one person
+
+That is the design rather than a deduplication bug. A person with an ORCID and a person known only by a name string printed on one page are identified by two different authorities and are two nodes, and nothing merges them on its own. `--merge-names` merges them when a normalized name matches exactly one ORCID node, refuses when two ORCIDs answer to the same name, and records `mergedFrom` on the survivor so the guess stays visible. The same holds for an institution known by name and the same institution known by ROR.
+
+## `--projection` or `--dir` was refused
+
+`--projection coauthor` is computed by the gexf writer and `--dir` names where the csv pair goes, so each needs its own `--format`. Both are usage errors rather than flags that are quietly ignored.
+
+## A graph file will not merge back in
+
+`--merge` reads `--format json` and only that. It is the one form of the ten that holds every field of every node and edge, where the RDF forms drop the properties that have no standard term and the two xml forms number their nodes, so reading either of those back would return a smaller graph than was written without saying so.
+
 ## The binary is not on your PATH
 
 `go install` puts the binary in `$(go env GOPATH)/bin`, usually `~/go/bin`, and a release archive leaves it wherever you unpacked it. See [installation](/getting-started/installation/).
