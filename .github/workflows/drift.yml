@@ -1,0 +1,86 @@
+name: drift
+
+# link.springer.com changes without telling anyone, and the failure mode is
+# quiet: a classifier that used to say Restricted starts saying OK, a pdf url
+# starts answering a pdf, a 404 starts being a 200. Every one of those looks
+# like the tool working. This runs the probes in scripts/drift.sh once a week
+# against the live site and opens an issue when one of them stops matching what
+# was measured.
+#
+# Weekly rather than nightly on purpose. Six requests is nothing, but a nightly
+# job that catches a change taking weeks to matter is somebody else's bandwidth
+# spent for our convenience.
+
+on:
+  schedule:
+    # Mondays at 07:23 UTC, off the hour to stay out of the cron rush.
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: drift
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: true
+
+      - name: build
+        run: go build -o bin/spr ./cmd/spr
+
+      # One run. The report goes to the step summary and to an artifact from
+      # this run rather than from a second one, because fetching the same six
+      # pages twice to print the same thing twice is Springer paying for our
+      # reporting.
+      - name: probe the live site
+        run: |
+          set -o pipefail
+          ./scripts/drift.sh 2>&1 | tee drift.txt
+
+      - name: report
+        if: always()
+        run: |
+          {
+            echo '### spr drift check'
+            echo '```'
+            cat drift.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: drift
+          path: drift.txt
+          retention-days: 90
+
+      # One open issue at a time. The title is fixed so a second week of the
+      # same drift comments rather than opening a duplicate.
+      - name: open or update the drift issue
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="drift: the site no longer answers the way it was measured"
+          existing=$(gh issue list --state open --search "$title in:title" --json number -q '.[0].number')
+          body=$(printf '%s\n\n%s\n' \
+            'The weekly drift check failed. One of the urls the classifier is built on stopped behaving the way it did when it was measured, which is code to fix rather than a flake to retry.' \
+            "The run, with the per url report in its summary: $RUN")
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body" --label drift
+          fi

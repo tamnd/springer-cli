@@ -1,63 +1,52 @@
 ---
 title: "Output formats"
-description: "The output contract every command shares: formats, fields, and templates."
+description: "Text for reading, json for piping, and the exit code that carries the rest."
 weight: 30
 ---
 
-Every list command in the fleet renders through one formatter, so the same flags
-work everywhere. Wire your commands through it as you add them, and this page
-describes what users get. Pick a format with `-o`, or let springer choose:
-a table when writing to a terminal, JSONL when piped.
-
-## Formats
+Every command takes `-o`:
 
 ```bash
-springer <command> -o table   # aligned columns for reading
-springer <command> -o jsonl   # one JSON object per line, for piping
-springer <command> -o json    # a single JSON array
-springer <command> -o csv     # spreadsheet friendly
-springer <command> -o tsv     # tab-separated
-springer <command> -o url     # just the URL column
-springer <command> -o raw     # the underlying bytes, unformatted
+spr get /article/10.1007/s10994-021-05946-3            # text, for reading
+spr get -o json /article/10.1007/s10994-021-05946-3    # json, for piping
 ```
 
-| Format | Best for |
+`spr get --body` is a third thing: the response body itself, unformatted, so a page or a pdf goes straight to a file or another tool.
+
+```bash
+spr get --body /journal/10994 > journal.html
+spr get --body --kind pdf /content/pdf/10.1007/s10994-021-05946-3.pdf > paper.pdf
+```
+
+## The exit code is part of the output
+
+A command that fetched a page successfully and a command that fetched a paywalled page both print something worth reading, so the difference between them is the exit code rather than an error message.
+
+| Code | Meaning |
 |---|---|
-| `table` | Reading on a terminal |
-| `jsonl` | Piping into another tool, one object at a time |
-| `json` | Loading a whole result as an array |
-| `csv` / `tsv` | Spreadsheets and quick column math |
-| `url` | Feeding URLs into other commands |
-| `raw` | The unformatted bytes (response bodies, file contents) |
+| 0 | It did what it was asked |
+| 1 | A flag or argument this tool does not understand. Nothing was fetched. |
+| 2 | The search surface answered with a client challenge and there was no fallback left |
+| 3 | The page was fetched and understood and there was nothing in it |
+| 4 | The publisher states `access=No`. The metadata was printed; only the body is missing. |
+| 5 | A network failure, a timeout, or a 5xx that outlived the retries |
+| 6 | An upstream said, in a header, that the budget is spent |
 
-## Narrowing columns
-
-Keep only the fields you want:
-
-```bash
-springer <command> --fields id,title,url
-```
-
-`--no-header` drops the header row in `table` and `csv` output, which helps when
-a downstream tool expects bare rows.
-
-## Templating rows
-
-For full control over each line, apply a Go text/template. Fields are the JSON
-keys, capitalised:
+So this works the way you would want it to:
 
 ```bash
-springer <command> --template '{{.URL}} {{.Title}}'
+spr get -o json "$url" || case $? in
+  4) echo "paywalled, metadata above" ;;
+  2) echo "challenged, try the rss feed" ;;
+esac
 ```
 
-## Why auto-detection helps
+## Seeing what it did
 
-Because the default adapts to the destination, the same command reads well by
-hand and parses cleanly in a pipe:
+`--debug` puts one line per request on stderr, which stays out of the pipe:
 
-```bash
-springer <command>            # a table, because this is a terminal
-springer <command> | wc -l    # JSONL, because this is a pipe
+```console
+$ spr get --debug --no-cache /article/10.1007/s10994-021-05946-3 -o json | jq .bytes
+spr: 200 ok 718872 bytes 3 redirects https://link.springer.com/article/10.1007/s10994-021-05946-3
+718872
 ```
-
-You only reach for `-o` when you want something other than that default.

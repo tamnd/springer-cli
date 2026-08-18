@@ -1,6 +1,6 @@
-title       = "springer"
+title       = "spr"
 baseURL     = "https://springer-cli.tamnd.com/"
-description = "A command line for springer."
+description = "A delightful command line for link.springer.com"
 contentDir  = "content"
 outputDir   = "public"
 theme       = "tago-doks"

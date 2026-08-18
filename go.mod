@@ -1,10 +1,9 @@
 module github.com/tamnd/springer-cli
 
-go 1.26
+go 1.26.6
 
 require (
 	github.com/charmbracelet/fang v1.0.0
-	github.com/mattn/go-isatty v0.0.22
 	github.com/spf13/cobra v1.10.2
 )
 
