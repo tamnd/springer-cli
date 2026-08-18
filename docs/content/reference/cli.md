@@ -34,10 +34,63 @@ Run `spr <command> --help` for the full flag list on any command, and see [confi
 | `cache` | Show or clear the page cache |
 | `version` | Print the version, commit and build date |
 
+## Reading identifiers from stdin
+
+Nine commands take one identifier, so all nine take any number of them, and read them one per line from stdin when they are given none: `get`, `work`, `journal`, `book`, `series`, `metrics`, `crossref`, `openalex` and `cited-by`.
+
+```bash
+spr sitemap --kind article --since 2026-08-01 | spr work --yes
+spr crossref 10.1007/s10994-021-05946-3 --references | spr work --yes
+spr cited-by 10.1007/s10994-021-05946-3 -o json | jq -r '.works[].doi' | spr work --yes
+spr work --yes < dois.txt
+```
+
+Blank lines are skipped and so is any line starting with `#`, which is what a hand maintained list of DOIs collects. Whitespace around a line is trimmed. Arguments always win: a command that was given identifiers does not read the pipe at all, so a stage in the middle of a pipeline that also names a work reads that work.
+
+`figures` and `tables` are the two commands not on the list, because their second positional argument is a figure or table number and a list of works with no numbers attached would be ambiguous.
+
+A run with no arguments and no pipe is refused rather than answered by waiting on the keyboard until you find ctrl-D.
+
+### The bill
+
+More than twenty identifiers stops and says what the run would cost before it makes the first request, because two thousand identifiers at the default pace is an hour and ten minutes and the moment to hear that is before it starts.
+
+```console
+$ spr crossref 10.1007/s10994-021-05946-3 --references | spr work
+spr: 66 works at 2s pace is 2 minutes
+     pass --yes to read them, or pipe in fewer
+```
+
+`--yes` is on all nine and means read them anyway. It is the same twenty and the same flag `spr graph` uses.
+
+### What a run of many exits with
+
+One identifier behaves exactly as it did before any of this existed: the exit code is that record's, and the error text is that record's. Everything already scripted against this tool keeps working.
+
+More than one is a question about the run rather than about any one record, so:
+
+| The run | Exit code |
+|---|---|
+| Every target read | 0 |
+| Some read, some restricted or challenged | 0, with the counts on stderr |
+| Every target restricted | 4 |
+| Every target challenged | 2 |
+| Any target failed outright | that failure's code |
+
+One paywalled work in five hundred is not a restricted run, which is why a status has to cover every target before it becomes the run's. A failure part way through does not stop the rest, since a run that dies on the third of five hundred has thrown away twenty minutes of pacing to say something it could have said at the end. Each failure prints as `spr: <target>: <what went wrong>` and the run ends with one summary line, both on stderr:
+
+```console
+$ spr crossref 10.1007/s10994-021-05946-3 --references | spr work --yes
+crossref: 66 of 122 deposited references carry a doi, and 56 do not
+spr: 13 of 66 read, 6 restricted, 53 failed
+```
+
+Thirteen of that paper's 66 resolvable references are published by Springer and the other 53 are IEEE, Elsevier, MIT Press and ACM, which this site does not have. The run exits 3, because the first thing that actually failed was a work that is not published here.
+
 ## `spr get`
 
 ```
-spr get <url or path> [flags]
+spr get <url or path>... [flags]
 ```
 
 The client with nothing on top of it. Follows the redirect chain, counts the hops, classifies the response on its content, and prints what it found without parsing a single field. Use it when a later command says something surprising and the question is whether the page or the parser changed.
@@ -46,6 +99,7 @@ The client with nothing on top of it. Follows the redirect chain, counts the hop
 |---|---|
 | `--body` | Write the response body to stdout instead of the summary |
 | `--kind` | Kind expected: `any`, `html`, `pdf` or `xml`. Deciding this up front is what makes `wrong_kind` possible. |
+| `--yes` | Read more than 20 urls without being billed first |
 
 ```bash
 spr get /article/10.1007/s10994-021-05946-3
@@ -168,7 +222,7 @@ When the HTML pass is challenged, the search completes on RSS alone and stderr s
 ## `spr work`
 
 ```
-spr work <doi, url or path> [flags]
+spr work <doi, url or path>... [flags]
 ```
 
 Reads a single work page and prints the record it produced, along with the envelope that says where each field came from. The four work types share one record: article, chapter, protocol and reference work entry.
@@ -179,6 +233,7 @@ A DOI is enough. The registrant prefix says who issued it and nothing about what
 |---|---|
 | `--text` | Print the body text of each section as well as the tree |
 | `--envelope` | Print the whole envelope: every field, its source, what was missed and what was left unread |
+| `--yes` | Read more than 20 works without being billed first |
 
 ```bash
 spr work 10.1007/s10994-021-05946-3
@@ -191,7 +246,7 @@ A restricted page is read rather than refused. Everything except the body is in 
 ## `spr journal`
 
 ```
-spr journal <id, issn, url or path> [flags]
+spr journal <id, issn, url or path>... [flags]
 ```
 
 Reads a journal home page. The Springer id, either ISSN, a path or a full url all work, and an id or an ISSN is turned into `/journal/<value>` as given rather than converted between forms.
@@ -200,6 +255,7 @@ Reads a journal home page. The Springer id, either ISSN, a path or a full url al
 |---|---|
 | `--volumes` | Make the second request for the volumes and issues page and print the whole run |
 | `--envelope` | Print the whole envelope: every field, its source, what was missed and what was left unread |
+| `--yes` | Read more than 20 journals without being billed first |
 
 ```bash
 spr journal 10994
@@ -215,7 +271,7 @@ Without `--volumes` the last line is a pointer that says `0 held` and where the 
 ## `spr book`
 
 ```
-spr book <doi, isbn, url or path> [flags]
+spr book <doi, isbn, url or path>... [flags]
 ```
 
 Reads a book, proceedings volume or reference work. A book is addressable by DOI and by ISBN and both are used as given, since the site resolves both to the same page.
@@ -224,6 +280,7 @@ Reads a book, proceedings volume or reference work. A book is addressable by DOI
 |---|---|
 | `--chapters` | Print the table of contents, front and back matter included |
 | `--envelope` | Print the whole envelope |
+| `--yes` | Read more than 20 books without being billed first |
 
 ```bash
 spr book 10.1007/978-3-031-28170-9
@@ -241,7 +298,7 @@ A book behind a subscription is read rather than refused, and exits 4.
 ## `spr series`
 
 ```
-spr series <id, url or path> [flags]
+spr series <id, url or path>... [flags]
 ```
 
 Reads a book series home page. A path with anything after the series id is a subpage rather than the home page and is refused as such.
@@ -249,6 +306,7 @@ Reads a book series home page. A path with anything after the series id is a sub
 | Flag | Meaning |
 |---|---|
 | `--envelope` | Print the whole envelope |
+| `--yes` | Read more than 20 series without being billed first |
 
 ```bash
 spr series 558
@@ -261,7 +319,7 @@ The books listed are the five the page shows out of many thousands, so the field
 ## `spr metrics`
 
 ```
-spr metrics <doi, url or path> [flags]
+spr metrics <doi, url or path>... [flags]
 ```
 
 Reads a work's `/metrics` subpage. A bare DOI goes straight to `/article/<doi>/metrics` rather than through the path search `spr work` does, because this subpage exists for articles: a chapter's `/metrics` answers 404, and one request that says so beats four that say the same thing.
@@ -269,6 +327,7 @@ Reads a work's `/metrics` subpage. A bare DOI goes straight to `/article/<doi>/m
 | Flag | Meaning |
 |---|---|
 | `--envelope` | Print the whole envelope |
+| `--yes` | Read more than 20 works without being billed first |
 
 ```bash
 spr metrics 10.1007/s10994-021-05946-3
@@ -429,7 +488,7 @@ spr sitemap
 spr sitemap --list
 spr sitemap --static journals
 spr sitemap --kind article --since 2026-08-01
-spr sitemap --kind book --since 2026-01-01 | spr work
+spr sitemap --kind book --since 2026-01-01 | spr work --yes
 spr sitemap --all --yes --resume > urls.txt
 ```
 
@@ -447,7 +506,7 @@ full walk     10,408 requests at 2s, 5 hours 47 minutes, bounded above by 52,040
 
 The date in a shard's file name is a bucket and not a publication date. The index holds 66 shards named `sitemap_2020-01-01_N`, roughly 330,000 works, because the first of January is where everything known only to its year is filed, and the entries inside the first of them carry 173 distinct `lastmod` values of which none is 2020-01-01. So `--since` and `--until` say which shards to read rather than what was published when, and nothing in this tool turns a bucket into a date.
 
-Urls go to stdout one per line and everything else goes to stderr, which is what makes `spr sitemap --kind book --since 2026 | spr work` a pipeline. With `-o json` the walk emits one object per line rather than an array, because the stream has no end to close an array with.
+Urls go to stdout one per line and everything else goes to stderr, which is what makes `spr sitemap --kind book --since 2026 | spr work --yes` a pipeline. With `-o json` the walk emits one object per line rather than an array, because the stream has no end to close an array with.
 
 The bill is computed from the index that was just fetched rather than from a figure compiled in, since the index grows daily. Above ten shards it is printed and the walk proceeds. Above a hundred, and always for `--all`, the walk stops until you pass `--yes`.
 
@@ -570,7 +629,7 @@ See the [building a graph](/guides/graphs/) guide for the node and edge tables a
 ## `spr crossref`
 
 ```
-spr crossref [doi] [flags]
+spr crossref [doi...] [flags]
 ```
 
 Reads the DOI registration agency, which holds what the publisher deposited rather than what the site renders. With a DOI it reads one record. With `--query`, `--title`, `--author` or any filter it searches.
@@ -593,6 +652,7 @@ Crossref answers what link.springer.com does not: the deposited abstract in full
 | `--sort`, `--order` | `relevance`, `published` or `is-referenced-by-count`, and `asc` or `desc` |
 | `--references` | Print the deposited reference list rather than the record |
 | `--envelope` | Print the whole envelope |
+| `--yes` | Read more than 20 dois without being billed first |
 
 ```bash
 spr crossref 10.1007/s10994-021-05946-3
@@ -600,10 +660,10 @@ spr crossref 10.1007/s10994-021-05946-3 --references
 spr crossref --issn 0885-6125 --from 2024 --rows 100
 spr crossref --funder 10.13039/501100001659 --type journal-article
 spr crossref --query uncertainty --facet type-name:5
-spr crossref 10.1007/s10994-021-05946-3 --references | spr crossref
+spr crossref 10.1007/s10994-021-05946-3 --references | spr crossref --yes
 ```
 
-A search with no DOI and nothing that narrows anything is a usage error. Sort, order, rows and the facet list are all flags, and none of them narrows a corpus of 170 million records into a request anybody meant to make.
+This is the one command with two modes and one empty argument list, so the rule is worth stating: DOIs given, or nothing to search with, means read records and take them off stdin when none were typed. Anything else is a search. A search with no DOI and nothing that narrows anything is a usage error. Sort, order, rows and the facet list are all flags, and none of them narrows a corpus of 170 million records into a request anybody meant to make.
 
 `--references` prints the reference DOIs one per line on stdout and the count on stderr, so a pipe still gets a clean list of identifiers while a person watching learns that the list is partial:
 
@@ -629,7 +689,7 @@ That first number is what other Crossref members deposited as citing this work. 
 ## `spr openalex`
 
 ```
-spr openalex [doi or work id] [flags]
+spr openalex [doi or work id...] [flags]
 ```
 
 Reads the open index that holds both citation directions, an abstract, an institution graph with ROR ids, and a field normalized impact figure. With a DOI or a `W` work id it reads one record. With `--query`, `--title`, `--author`, `--cites` or `--cited-by` it searches.
@@ -646,6 +706,7 @@ Reads the open index that holds both citation directions, an abstract, an instit
 | `--rows` | Results per page, capped by OpenAlex at 200 |
 | `--page` | Which page of results |
 | `--envelope` | Print the whole envelope |
+| `--yes` | Read more than 20 works without being billed first |
 
 ```bash
 spr openalex 10.1007/s10994-021-05946-3
@@ -654,7 +715,10 @@ spr openalex --query "aleatoric uncertainty" --from 2020-01-01 --rows 50
 spr openalex --issn 0885-6125 --from 2024-01-01
 spr openalex --cited-by W3014596384
 spr openalex 10.1007/s10994-021-05946-3 -o json | jq -r '.authors[].institutions[].ror'
+spr cited-by W3014596384 -o json | jq -r '.works[].id' | spr openalex --yes
 ```
+
+Identifiers given, or nothing to search with, means read records and take them off stdin when none were typed, the same rule `spr crossref` follows.
 
 The abstract arrives as an inverted index, a map of word to the positions it appears at, and is put back in reading order before it is printed. Institutions carry ROR ids and country codes, which is the only place in this tool where an affiliation is an identifier rather than a string. Both `concepts` and `topics` are printed, because OpenAlex publishes both classifications and they disagree.
 
@@ -672,7 +736,7 @@ That number is an aggregate rebuilt on its own schedule and the live listing cou
 ## `spr cited-by`
 
 ```
-spr cited-by <doi or work id> [flags]
+spr cited-by <doi or work id>... [flags]
 ```
 
 The direction link.springer.com has no page for. A work page lists what a work cites. Nothing on the site lists what cites it, and the metrics page states a total attributed to Dimensions without naming a single citing work.
@@ -681,12 +745,13 @@ The direction link.springer.com has no page for. A work page lists what a work c
 |---|---|
 | `--by-year` | Counts grouped by publication year, one request instead of a full listing |
 | `--limit` | How many citing works to list, `0` for every one of them at 200 per request |
+| `--yes` | Read more than 20 works without being billed first |
 
 ```bash
 spr cited-by 10.1007/s10994-021-05946-3
 spr cited-by 10.1007/s10994-021-05946-3 --by-year
 spr cited-by W3014596384 --limit 0
-spr cited-by 10.1007/s10994-021-05946-3 -o json | jq -r '.works[].doi' | spr work
+spr cited-by 10.1007/s10994-021-05946-3 -o json | jq -r '.works[].doi' | spr work --yes
 ```
 
 The total it prints is the count of this listing and not the record's stored `cited_by_count`. The two were 1,554 and 1,563 for the same work in the same minute, because one is the live index and the other is an aggregate. Both are OpenAlex's and the output says which one it is holding.

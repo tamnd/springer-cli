@@ -16,7 +16,7 @@ import (
 
 func workCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "work <doi, url or path>",
+		Use:   "work <doi, url or path>...",
 		Short: "Read one article, chapter, protocol or reference work entry",
 		Long: "work reads a single work page and prints the record it produced, along with the envelope\n" +
 			"that says where each field came from.\n\n" +
@@ -25,54 +25,73 @@ func workCmd() *cobra.Command {
 			"request per miss and usually costs none.\n\n" +
 			"A restricted page is read rather than refused. Everything except the body is in the head\n" +
 			"of a paywalled page, so the record is printed, the body is named in the envelope with the\n" +
-			"page's own sentence for why, and the exit code says access was withheld.",
-		Args: cobra.ExactArgs(1),
+			"page's own sentence for why, and the exit code says access was withheld.\n\n" +
+			"It takes any number of works and reads them one per line from stdin when it is given\n" +
+			"none, so a sitemap slice or a reference list pipes straight into it.",
+		Args: cobra.ArbitraryArgs,
 		Example: "  spr work 10.1007/s10994-021-05946-3\n" +
 			"  spr work /chapter/10.1007/978-3-030-58607-2_1\n" +
-			"  spr work -o json 10.1007/s10994-021-05946-3 | jq .envelope",
+			"  spr work -o json 10.1007/s10994-021-05946-3 | jq .envelope\n" +
+			"  spr sitemap --kind article --since 2026-08-01 | spr work --yes",
 	}
 
 	var (
 		text     bool
 		envelope bool
+		yes      bool
 	)
 	cmd.Flags().BoolVar(&text, "text", false, "print the body text of each section as well as the tree")
 	cmd.Flags().BoolVar(&envelope, "envelope", false, "print the whole envelope: every field, its source, what was missed and what was left unread")
+	cmd.Flags().BoolVar(&yes, "yes", false, "read more than "+fmt.Sprint(Targets)+" works without being billed first")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		c := client(cmd.ErrOrStderr())
-		resp, err := findWork(cmd.Context(), c, args[0])
+		list, err := targets(cmd, args, "work")
 		if err != nil {
+			return exit(CodeUsage, err)
+		}
+		if err := bill(cmd, list, yes, "works"); err != nil {
 			return err
 		}
 
-		if resp.Status == spr.StatusChallenged {
-			fmt.Fprintln(cmd.ErrOrStderr(), explain(resp.Status))
-			return exit(CodeChallenged, nil)
-		}
-
-		w, err := spr.ExtractWork(resp)
-		if err != nil {
-			if errors.Is(err, spr.ErrNotAWork) {
-				return exit(CodeUsage, fmt.Errorf("%s is not a work page, so there is no work record to read from it", resp.URL))
-			}
-			return exit(CodeNoData, err)
-		}
-
-		out := cmd.OutOrStdout()
-		if g.format == "json" {
-			enc := json.NewEncoder(out)
-			enc.SetIndent("", "  ")
-			if err := enc.Encode(w); err != nil {
-				return exit(CodeTransport, err)
-			}
-			return statusExit(resp.Status)
-		}
-
-		printWork(out, w, text, envelope)
-		return statusExit(resp.Status)
+		c := client(cmd.ErrOrStderr())
+		return each(cmd, list, func(target string) error {
+			return oneWork(cmd, c, target, text, envelope)
+		})
 	}
 	return cmd
+}
+
+func oneWork(cmd *cobra.Command, c *spr.Client, target string, text, envelope bool) error {
+	resp, err := findWork(cmd.Context(), c, target)
+	if err != nil {
+		return err
+	}
+
+	if resp.Status == spr.StatusChallenged {
+		fmt.Fprintln(cmd.ErrOrStderr(), explain(resp.Status))
+		return exit(CodeChallenged, nil)
+	}
+
+	w, err := spr.ExtractWork(resp)
+	if err != nil {
+		if errors.Is(err, spr.ErrNotAWork) {
+			return exit(CodeUsage, fmt.Errorf("%s is not a work page, so there is no work record to read from it", resp.URL))
+		}
+		return exit(CodeNoData, err)
+	}
+
+	out := cmd.OutOrStdout()
+	if g.format == "json" {
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(w); err != nil {
+			return exit(CodeTransport, err)
+		}
+		return statusExit(resp.Status)
+	}
+
+	printWork(out, w, text, envelope)
+	return statusExit(resp.Status)
 }
 
 // findWork turns one argument into one fetched page.

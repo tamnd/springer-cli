@@ -22,7 +22,7 @@ import (
 
 func journalCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "journal <id, issn or url>",
+		Use:   "journal <id, issn or url>...",
 		Short: "Read one journal home page",
 		Long: "journal reads a journal home page and prints the record it produced.\n\n" +
 			"A journal home page carries 8 meta names and none of them are bibliographic, so almost\n" +
@@ -30,72 +30,90 @@ func journalCmd() *cobra.Command {
 			"ships for its own tag manager. The envelope says which, field by field.\n\n" +
 			"The volumes are a second page and a second request. --volumes makes it, and without it\n" +
 			"the record says where the volumes are and that none were read, which is a different\n" +
-			"statement from a journal with no volumes.",
-		Args: cobra.ExactArgs(1),
+			"statement from a journal with no volumes.\n\n" +
+			"It takes any number of journals and reads them one per line from stdin when it is given\n" +
+			"none.",
+		Args: cobra.ArbitraryArgs,
 		Example: "  spr journal 10994\n" +
 			"  spr journal --volumes 10994\n" +
-			"  spr journal -o json 10994 | jq .metrics",
+			"  spr journal -o json 10994 | jq .metrics\n" +
+			"  spr sitemap --static journals | spr journal --yes",
 	}
 
 	var (
 		volumes  bool
 		envelope bool
+		yes      bool
 	)
 	cmd.Flags().BoolVar(&volumes, "volumes", false, "fetch the volumes and issues page as well, which is one more request and the whole back catalogue")
 	cmd.Flags().BoolVar(&envelope, "envelope", false, "print the whole envelope: every field, its source, what was missed and what was left unread")
+	cmd.Flags().BoolVar(&yes, "yes", false, "read more than "+fmt.Sprint(Targets)+" journals without being billed first")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		c := client(cmd.ErrOrStderr())
-		resp, err := fetchContainer(cmd, c, journalTarget(args[0]))
+		list, err := targets(cmd, args, "journal")
 		if err != nil {
+			return exit(CodeUsage, err)
+		}
+		if err := bill(cmd, list, yes, "journals"); err != nil {
 			return err
 		}
-		j, err := spr.ExtractJournal(resp)
-		if err != nil {
-			return containerError(err, resp.URL, "journal")
-		}
-
-		var vols *spr.Volumes
-		if volumes {
-			vresp, err := fetchContainer(cmd, c, spr.VolumesURL(spr.SpringerID(j.SpringerID)))
-			if err != nil {
-				return err
-			}
-			vols, err = spr.ExtractVolumes(vresp)
-			if err != nil {
-				return containerError(err, vresp.URL, "volumes and issues")
-			}
-			// The pointer is called volumes, so it counts volumes. Count() is
-			// the issue total, and filling this with it printed "volumes 348 of
-			// 348 held" six lines above "volumes (114), 348 issues", which is
-			// one page disagreeing with itself about which noun it is counting.
-			j.Volumes = &spr.Conn{
-				Loaded:     len(vols.Volumes),
-				TotalCount: len(vols.Volumes),
-				Complete:   true,
-				URL:        vresp.URL,
-			}
-		}
-
-		out := cmd.OutOrStdout()
-		if g.format == "json" {
-			if vols != nil {
-				return encode(out, map[string]any{"journal": j, "volumes": vols})
-			}
-			return encode(out, j)
-		}
-		printJournal(out, j, envelope)
-		if vols != nil {
-			printVolumes(out, vols)
-		}
-		return statusExit(resp.Status)
+		c := client(cmd.ErrOrStderr())
+		return each(cmd, list, func(target string) error {
+			return oneJournal(cmd, c, target, volumes, envelope)
+		})
 	}
 	return cmd
 }
 
+func oneJournal(cmd *cobra.Command, c *spr.Client, arg string, volumes, envelope bool) error {
+	resp, err := fetchContainer(cmd, c, journalTarget(arg))
+	if err != nil {
+		return err
+	}
+	j, err := spr.ExtractJournal(resp)
+	if err != nil {
+		return containerError(err, resp.URL, "journal")
+	}
+
+	var vols *spr.Volumes
+	if volumes {
+		vresp, err := fetchContainer(cmd, c, spr.VolumesURL(spr.SpringerID(j.SpringerID)))
+		if err != nil {
+			return err
+		}
+		vols, err = spr.ExtractVolumes(vresp)
+		if err != nil {
+			return containerError(err, vresp.URL, "volumes and issues")
+		}
+		// The pointer is called volumes, so it counts volumes. Count() is
+		// the issue total, and filling this with it printed "volumes 348 of
+		// 348 held" six lines above "volumes (114), 348 issues", which is
+		// one page disagreeing with itself about which noun it is counting.
+		j.Volumes = &spr.Conn{
+			Loaded:     len(vols.Volumes),
+			TotalCount: len(vols.Volumes),
+			Complete:   true,
+			URL:        vresp.URL,
+		}
+	}
+
+	out := cmd.OutOrStdout()
+	if g.format == "json" {
+		if vols != nil {
+			return encode(out, map[string]any{"journal": j, "volumes": vols})
+		}
+		return encode(out, j)
+	}
+	printJournal(out, j, envelope)
+	if vols != nil {
+		printVolumes(out, vols)
+	}
+	return statusExit(resp.Status)
+}
+
 func bookCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "book <doi, isbn or url>",
+		Use:   "book <doi, isbn or url>...",
 		Short: "Read one book, proceedings volume or reference work",
 		Long: "book reads a book page and prints the record it produced, including its table of\n" +
 			"contents and what the page is charging for it.\n\n" +
@@ -105,81 +123,119 @@ func bookCmd() *cobra.Command {
 			"about which edition you can buy is worse than one that says less.\n\n" +
 			"Prices are localized by the requesting address, so the currency is read off the page\n" +
 			"and never assumed. A record fetched from two places can carry two currencies for the\n" +
-			"same book and neither is wrong.",
-		Args: cobra.ExactArgs(1),
+			"same book and neither is wrong.\n\n" +
+			"It takes any number of books and reads them one per line from stdin when it is given\n" +
+			"none.",
+		Args: cobra.ArbitraryArgs,
 		Example: "  spr book 10.1007/978-3-031-28170-9\n" +
 			"  spr book 978-3-031-28170-9\n" +
-			"  spr book -o json 10.1007/978-3-031-28170-9 | jq '.chapters[].doi'",
+			"  spr book -o json 10.1007/978-3-031-28170-9 | jq '.chapters[].doi'\n" +
+			"  spr sitemap --kind book --since 2026-08-01 | spr book --yes",
 	}
 
 	var (
 		chapters bool
 		envelope bool
+		yes      bool
 	)
 	cmd.Flags().BoolVar(&chapters, "chapters", false, "print the whole table of contents rather than a count")
 	cmd.Flags().BoolVar(&envelope, "envelope", false, "print the whole envelope: every field, its source, what was missed and what was left unread")
+	cmd.Flags().BoolVar(&yes, "yes", false, "read more than "+fmt.Sprint(Targets)+" books without being billed first")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		list, err := targets(cmd, args, "book")
+		if err != nil {
+			return exit(CodeUsage, err)
+		}
+		if err := bill(cmd, list, yes, "books"); err != nil {
+			return err
+		}
 		c := client(cmd.ErrOrStderr())
-		target, err := bookTarget(args[0])
-		if err != nil {
-			return err
-		}
-		resp, err := fetchContainer(cmd, c, target)
-		if err != nil {
-			return err
-		}
-		b, err := spr.ExtractBook(resp)
-		if err != nil {
-			return containerError(err, resp.URL, "book")
-		}
-
-		out := cmd.OutOrStdout()
-		if g.format == "json" {
-			return encode(out, b)
-		}
-		printBook(out, b, chapters, envelope)
-		return statusExit(resp.Status)
+		return each(cmd, list, func(target string) error {
+			return oneBook(cmd, c, target, chapters, envelope)
+		})
 	}
 	return cmd
 }
 
+func oneBook(cmd *cobra.Command, c *spr.Client, arg string, chapters, envelope bool) error {
+	target, err := bookTarget(arg)
+	if err != nil {
+		return err
+	}
+	resp, err := fetchContainer(cmd, c, target)
+	if err != nil {
+		return err
+	}
+	b, err := spr.ExtractBook(resp)
+	if err != nil {
+		return containerError(err, resp.URL, "book")
+	}
+
+	out := cmd.OutOrStdout()
+	if g.format == "json" {
+		return encode(out, b)
+	}
+	printBook(out, b, chapters, envelope)
+	return statusExit(resp.Status)
+}
+
 func seriesCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "series <id or url>",
+		Use:   "series <id or url>...",
 		Short: "Read one book series home page",
 		Long: "series reads a book series home page and prints the record it produced.\n\n" +
 			"The home page shows the five most recent titles and not the series, which for Lecture\n" +
 			"Notes in Computer Science is five out of many thousands. The record says so: the titles\n" +
 			"it holds are named latest_titles, and the pointer to the rest of them says how many\n" +
-			"were read and where the others are.",
-		Args: cobra.ExactArgs(1),
+			"were read and where the others are.\n\n" +
+			"It takes any number of series and reads them one per line from stdin when it is given\n" +
+			"none.",
+		Args: cobra.ArbitraryArgs,
 		Example: "  spr series 558\n" +
-			"  spr series -o json 558 | jq .editors",
+			"  spr series -o json 558 | jq .editors\n" +
+			"  spr sitemap --static series | spr series --yes",
 	}
 
-	var envelope bool
+	var (
+		envelope bool
+		yes      bool
+	)
 	cmd.Flags().BoolVar(&envelope, "envelope", false, "print the whole envelope: every field, its source, what was missed and what was left unread")
+	cmd.Flags().BoolVar(&yes, "yes", false, "read more than "+fmt.Sprint(Targets)+" series without being billed first")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		c := client(cmd.ErrOrStderr())
-		resp, err := fetchContainer(cmd, c, seriesTarget(args[0]))
+		list, err := targets(cmd, args, "series")
 		if err != nil {
+			return exit(CodeUsage, err)
+		}
+		if err := bill(cmd, list, yes, "series"); err != nil {
 			return err
 		}
-		s, err := spr.ExtractSeries(resp)
-		if err != nil {
-			return containerError(err, resp.URL, "series")
-		}
-
-		out := cmd.OutOrStdout()
-		if g.format == "json" {
-			return encode(out, s)
-		}
-		printSeries(out, s, envelope)
-		return statusExit(resp.Status)
+		c := client(cmd.ErrOrStderr())
+		return each(cmd, list, func(target string) error {
+			return oneSeries(cmd, c, target, envelope)
+		})
 	}
 	return cmd
+}
+
+func oneSeries(cmd *cobra.Command, c *spr.Client, arg string, envelope bool) error {
+	resp, err := fetchContainer(cmd, c, seriesTarget(arg))
+	if err != nil {
+		return err
+	}
+	s, err := spr.ExtractSeries(resp)
+	if err != nil {
+		return containerError(err, resp.URL, "series")
+	}
+
+	out := cmd.OutOrStdout()
+	if g.format == "json" {
+		return encode(out, s)
+	}
+	printSeries(out, s, envelope)
+	return statusExit(resp.Status)
 }
 
 // journalTarget turns one argument into one path. A url or a path is taken as

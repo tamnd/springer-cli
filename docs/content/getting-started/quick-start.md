@@ -139,10 +139,10 @@ That last one is not a convenience. The article page announces its tables and co
 ```bash
 spr sitemap                                  # one request, the shape of the whole site
 spr sitemap --static journals                # three requests, every journal there is
-spr sitemap --kind article --since 2026-08-01 | spr work
+spr sitemap --kind article --since 2026-08-01 | spr work --yes
 ```
 
-Urls go to stdout one per line and everything else goes to stderr, so that last line is a pipeline. The date in a shard's file name is a bucket and not a publication date, which is the one thing worth reading [the guide](/guides/sitemaps/) for before walking any of it.
+Urls go to stdout one per line and everything else goes to stderr, and every command that reads one identifier reads a list of them off stdin, so that last line is a pipeline. `--yes` is there because a run of more than twenty is billed before it starts. The date in a shard's file name is a bucket and not a publication date, which is the one thing worth reading [the guide](/guides/sitemaps/) for before walking any of it.
 
 ## Ask the hosts this site is not
 

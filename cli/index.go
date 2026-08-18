@@ -24,7 +24,7 @@ import (
 
 func crossrefCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "crossref [doi]",
+		Use:   "crossref [doi...]",
 		Short: "Read a work, its reference list or a query from Crossref",
 		Long: "crossref reads the DOI registration agency, which holds what the publisher deposited\n" +
 			"rather than what the web page renders.\n\n" +
@@ -36,13 +36,16 @@ func crossrefCmd() *cobra.Command {
 			"--facet counts a result set by group for one request instead of paging it.\n\n" +
 			"The citation count here is crossref_citations and it is deposited citations only. It\n" +
 			"was 1,553 for a work the metrics page reports as 1,906 and OpenAlex as 1,563. All\n" +
-			"three are right about a different corpus.",
-		Args: cobra.MaximumNArgs(1),
+			"three are right about a different corpus.\n\n" +
+			"It takes any number of dois and reads them one per line from stdin when it is given\n" +
+			"neither a doi nor anything to search with.",
+		Args: cobra.ArbitraryArgs,
 		Example: "  spr crossref 10.1007/s10994-021-05946-3\n" +
 			"  spr crossref 10.1007/s10994-021-05946-3 --references\n" +
 			"  spr crossref --query \"aleatoric uncertainty\" --issn 0885-6125 --from 2020 --to 2024\n" +
 			"  spr crossref --query \"uncertainty\" --facet type-name:5 --facet publisher-name:5\n" +
-			"  spr crossref -o json 10.1007/s10994-021-05946-3 | jq .counts",
+			"  spr crossref -o json 10.1007/s10994-021-05946-3 | jq .counts\n" +
+			"  spr crossref 10.1007/s10994-021-05946-3 --references | spr crossref --yes",
 	}
 
 	var (
@@ -50,6 +53,7 @@ func crossrefCmd() *cobra.Command {
 		issn, isbn string
 		references bool
 		envelope   bool
+		yes        bool
 	)
 
 	f := cmd.Flags()
@@ -69,28 +73,31 @@ func crossrefCmd() *cobra.Command {
 	f.StringVar(&q.Order, "order", "", "asc or desc")
 	f.BoolVar(&references, "references", false, "print the deposited reference list rather than the record")
 	f.BoolVar(&envelope, "envelope", false, "print the whole envelope: every field, its source, what was missed and what was left unread")
+	f.BoolVar(&yes, "yes", false, "read more than "+fmt.Sprint(Targets)+" dois without being billed first")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		out, errw := cmd.OutOrStdout(), cmd.ErrOrStderr()
 		c := client(errw)
 
-		if len(args) == 1 {
-			doi, err := spr.ParseDOI(args[0])
+		// This is the one command with two modes and one empty argument list, so
+		// the rule is written down rather than inferred. Dois given, or nothing
+		// to search with, means read records, and the dois come off stdin when
+		// none were typed. Anything else is the search this command already ran.
+		searching := issn != "" || isbn != "" || !emptyCrossrefQuery(q)
+		if len(args) > 0 || !searching {
+			list, err := targets(cmd, args, "doi")
 			if err != nil {
+				if len(args) == 0 && !searching {
+					return exit(CodeUsage, errors.New("crossref needs a doi, or --query, --title, --author or a filter to search with"))
+				}
 				return exit(CodeUsage, err)
 			}
-			if references {
-				return runCrossrefReferences(cmd, c, doi)
+			if err := bill(cmd, list, yes, "dois"); err != nil {
+				return err
 			}
-			w, err := c.CrossrefWork(cmd.Context(), doi)
-			if err != nil {
-				return indexError(err)
-			}
-			if g.format == "json" {
-				return encode(out, w)
-			}
-			printCrossrefWork(out, w, envelope)
-			return nil
+			return each(cmd, list, func(target string) error {
+				return oneCrossref(cmd, c, target, references, envelope)
+			})
 		}
 
 		if references {
@@ -132,6 +139,26 @@ func crossrefCmd() *cobra.Command {
 		return crossrefExit(res)
 	}
 	return cmd
+}
+
+func oneCrossref(cmd *cobra.Command, c *spr.Client, arg string, references, envelope bool) error {
+	doi, err := spr.ParseDOI(arg)
+	if err != nil {
+		return exit(CodeUsage, err)
+	}
+	if references {
+		return runCrossrefReferences(cmd, c, doi)
+	}
+	w, err := c.CrossrefWork(cmd.Context(), doi)
+	if err != nil {
+		return indexError(err)
+	}
+	out := cmd.OutOrStdout()
+	if g.format == "json" {
+		return encode(out, w)
+	}
+	printCrossrefWork(out, w, envelope)
+	return nil
 }
 
 // emptyCrossrefQuery is whether a query would ask Crossref for everything.
@@ -179,7 +206,7 @@ func runCrossrefReferences(cmd *cobra.Command, c *spr.Client, doi spr.DOI) error
 
 func openalexCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "openalex [doi or work id]",
+		Use:   "openalex [doi or work id...]",
 		Short: "Read a work or a query from OpenAlex",
 		Long: "openalex reads the open index that holds both citation directions, an abstract, and\n" +
 			"institution ids that resolve to ROR.\n\n" +
@@ -192,18 +219,22 @@ func openalexCmd() *cobra.Command {
 			"whitespace and any markup do not.\n\n" +
 			"openalex_citations is a stored aggregate rather than a live count. The record carries\n" +
 			"an updated date, and this command prints it next to the number, because listing the\n" +
-			"same work's citations in the same minute returned nine fewer.",
-		Args: cobra.MaximumNArgs(1),
+			"same work's citations in the same minute returned nine fewer.\n\n" +
+			"It takes any number of identifiers and reads them one per line from stdin when it is\n" +
+			"given neither an identifier nor anything to search with.",
+		Args: cobra.ArbitraryArgs,
 		Example: "  spr openalex 10.1007/s10994-021-05946-3\n" +
 			"  spr openalex W3014596384\n" +
 			"  spr openalex --query \"aleatoric uncertainty\" --from 2020 --to 2024\n" +
-			"  spr openalex -o json W3014596384 | jq '.authors[].institutions[].ror'",
+			"  spr openalex -o json W3014596384 | jq '.authors[].institutions[].ror'\n" +
+			"  spr cited-by W3014596384 -o json | jq -r '.works[].id' | spr openalex --yes",
 	}
 
 	var (
 		q        spr.OpenAlexQuery
 		issn     string
 		envelope bool
+		yes      bool
 	)
 
 	f := cmd.Flags()
@@ -218,21 +249,29 @@ func openalexCmd() *cobra.Command {
 	f.IntVar(&q.PerPage, "rows", 25, "results per page, capped by OpenAlex at 200")
 	f.IntVar(&q.Page, "page", 1, "which page of results")
 	f.BoolVar(&envelope, "envelope", false, "print the whole envelope: every field, its source, what was missed and what was left unread")
+	f.BoolVar(&yes, "yes", false, "read more than "+fmt.Sprint(Targets)+" works without being billed first")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		out, errw := cmd.OutOrStdout(), cmd.ErrOrStderr()
 		c := client(errw)
 
-		if len(args) == 1 {
-			w, err := openAlexRecord(cmd, c, args[0])
+		// The same rule as crossref: identifiers given, or nothing to search
+		// with, means read records and take them off stdin when none were typed.
+		searching := issn != "" || q.Search != "" || q.Title != "" || q.Author != "" || q.Cites != "" || q.CitedBy != ""
+		if len(args) > 0 || !searching {
+			list, err := targets(cmd, args, "doi or work id")
 			if err != nil {
+				if len(args) == 0 && !searching {
+					return exit(CodeUsage, errors.New("openalex needs a doi or a work id, or --query, --title, --author, --issn, --cites or --cited-by to search with"))
+				}
+				return exit(CodeUsage, err)
+			}
+			if err := bill(cmd, list, yes, "works"); err != nil {
 				return err
 			}
-			if g.format == "json" {
-				return encode(out, w)
-			}
-			printOpenAlexWork(out, w, envelope)
-			return nil
+			return each(cmd, list, func(target string) error {
+				return oneOpenAlex(cmd, c, target, envelope)
+			})
 		}
 
 		if issn != "" {
@@ -265,6 +304,19 @@ func openalexCmd() *cobra.Command {
 	return cmd
 }
 
+func oneOpenAlex(cmd *cobra.Command, c *spr.Client, arg string, envelope bool) error {
+	w, err := openAlexRecord(cmd, c, arg)
+	if err != nil {
+		return err
+	}
+	out := cmd.OutOrStdout()
+	if g.format == "json" {
+		return encode(out, w)
+	}
+	printOpenAlexWork(out, w, envelope)
+	return nil
+}
+
 // openAlexRecord reads one work by whichever of the two identifiers was given.
 // A DOI goes to the doi: form of the path and a W id goes to the id itself,
 // because OpenAlex answers both and picking the wrong one is a 404 rather than
@@ -290,7 +342,7 @@ func openAlexRecord(cmd *cobra.Command, c *spr.Client, arg string) (*spr.OpenAle
 
 func citedByCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "cited-by <doi or work id>",
+		Use:   "cited-by <doi or work id>...",
 		Short: "List the works that cite this one, which this site does not publish",
 		Long: "cited-by is the direction link.springer.com has no page for.\n\n" +
 			"A work page lists what a work cites. Nothing on the site lists what cites it, and the\n" +
@@ -301,77 +353,94 @@ func citedByCmd() *cobra.Command {
 			"because one is the live index and the other is an aggregate rebuilt on its own\n" +
 			"schedule. Both are OpenAlex's and this command says which one it is holding.\n\n" +
 			"--by-year gets the whole history in one request instead of the eight a full listing\n" +
-			"costs, which is the cheap way to ask when a work was read rather than by whom.",
-		Args: cobra.ExactArgs(1),
+			"costs, which is the cheap way to ask when a work was read rather than by whom.\n\n" +
+			"It takes any number of identifiers and reads them one per line from stdin when it is\n" +
+			"given none.",
+		Args: cobra.ArbitraryArgs,
 		Example: "  spr cited-by 10.1007/s10994-021-05946-3\n" +
 			"  spr cited-by 10.1007/s10994-021-05946-3 --by-year\n" +
 			"  spr cited-by W3014596384 --limit 0\n" +
-			"  spr cited-by 10.1007/s10994-021-05946-3 -o json | jq -r '.works[].doi' | spr work",
+			"  spr cited-by 10.1007/s10994-021-05946-3 -o json | jq -r '.works[].doi' | spr work --yes",
 	}
 
 	var (
 		byYear bool
 		limit  int
+		yes    bool
 	)
 	cmd.Flags().BoolVar(&byYear, "by-year", false, "counts grouped by publication year, one request instead of a full listing")
 	cmd.Flags().IntVar(&limit, "limit", 50, "how many citing works to list, 0 for every one of them at 200 per request")
+	cmd.Flags().BoolVar(&yes, "yes", false, "read more than "+fmt.Sprint(Targets)+" works without being billed first")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		out, errw := cmd.OutOrStdout(), cmd.ErrOrStderr()
-		c := client(errw)
-
-		id, err := openAlexID(cmd, c, args[0])
+		list, err := targets(cmd, args, "doi or work id")
 		if err != nil {
+			return exit(CodeUsage, err)
+		}
+		if err := bill(cmd, list, yes, "works"); err != nil {
 			return err
 		}
+		c := client(cmd.ErrOrStderr())
+		return each(cmd, list, func(target string) error {
+			return oneCitedBy(cmd, c, target, byYear, limit)
+		})
+	}
+	return cmd
+}
 
-		if byYear {
-			years, total, err := c.OpenAlexCitedByYear(cmd.Context(), id)
-			if err != nil {
-				return indexError(err)
-			}
-			if g.format == "json" {
-				if err := encode(out, map[string]any{"id": id, "openalex_cited_by": total, "by_year": years}); err != nil {
-					return err
-				}
-			} else {
-				fmt.Fprintf(out, "%s cited by %s works, as OpenAlex counts them today\n", id, group(total))
-				for _, y := range years {
-					fmt.Fprintf(out, "  %d  %s\n", y.Year, group(y.Count))
-				}
-			}
-			if total == 0 {
-				return exit(CodeNoData, nil)
-			}
-			return nil
-		}
+func oneCitedBy(cmd *cobra.Command, c *spr.Client, arg string, byYear bool, limit int) error {
+	out := cmd.OutOrStdout()
 
-		works, total, err := c.OpenAlexCitedBy(cmd.Context(), id, limit)
+	id, err := openAlexID(cmd, c, arg)
+	if err != nil {
+		return err
+	}
+
+	if byYear {
+		years, total, err := c.OpenAlexCitedByYear(cmd.Context(), id)
 		if err != nil {
 			return indexError(err)
 		}
 		if g.format == "json" {
-			if err := encode(out, map[string]any{"id": id, "openalex_cited_by": total, "works": works}); err != nil {
+			if err := encode(out, map[string]any{"id": id, "openalex_cited_by": total, "by_year": years}); err != nil {
 				return err
 			}
 		} else {
-			fmt.Fprintf(out, "%s cited by %s works, showing %d, counted live by OpenAlex\n", id, group(total), len(works))
-			for i, w := range works {
-				fmt.Fprintf(out, "\n%3d  %s\n", i+1, wrap(w.Title, 70, "     "))
-				if line := citingFacts(w); line != "" {
-					fmt.Fprintf(out, "     %s\n", line)
-				}
-				if w.DOI != "" {
-					fmt.Fprintf(out, "     %s\n", w.DOI)
-				}
+			fmt.Fprintf(out, "%s cited by %s works, as OpenAlex counts them today\n", id, group(total))
+			for _, y := range years {
+				fmt.Fprintf(out, "  %d  %s\n", y.Year, group(y.Count))
 			}
 		}
-		if len(works) == 0 {
+		if total == 0 {
 			return exit(CodeNoData, nil)
 		}
 		return nil
 	}
-	return cmd
+
+	works, total, err := c.OpenAlexCitedBy(cmd.Context(), id, limit)
+	if err != nil {
+		return indexError(err)
+	}
+	if g.format == "json" {
+		if err := encode(out, map[string]any{"id": id, "openalex_cited_by": total, "works": works}); err != nil {
+			return err
+		}
+	} else {
+		fmt.Fprintf(out, "%s cited by %s works, showing %d, counted live by OpenAlex\n", id, group(total), len(works))
+		for i, w := range works {
+			fmt.Fprintf(out, "\n%3d  %s\n", i+1, wrap(w.Title, 70, "     "))
+			if line := citingFacts(w); line != "" {
+				fmt.Fprintf(out, "     %s\n", line)
+			}
+			if w.DOI != "" {
+				fmt.Fprintf(out, "     %s\n", w.DOI)
+			}
+		}
+	}
+	if len(works) == 0 {
+		return exit(CodeNoData, nil)
+	}
+	return nil
 }
 
 // openAlexID turns whatever the caller typed into an OpenAlex work id, looking

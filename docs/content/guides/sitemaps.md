@@ -9,7 +9,7 @@ Search answers questions. The sitemaps answer a different one: what is there at 
 ```bash
 spr sitemap                       # one request, the shape of everything
 spr sitemap --static journals     # three requests, every journal there is
-spr sitemap --kind book --since 2026-01-01 | spr work
+spr sitemap --kind book --since 2026-01-01 | spr work --yes
 ```
 
 There are twelve maps in total. One index of dated shards, and eight static maps that between them name every journal, series and collection Springer has. The eight are the best value per request anywhere in this tool. The index is 10,408 shards and close to six hours, so it is billed before it is walked.
@@ -87,7 +87,7 @@ sitemap: sitemap-subjects-index.xml is an index rather than a list, so these 10 
 Feed any of these straight into the container commands:
 
 ```bash
-spr sitemap --static journals | head -20 | xargs -n1 spr journal
+spr sitemap --static journals | head -20 | spr journal
 ```
 
 ## Walking the shards
@@ -139,10 +139,10 @@ The sitemaps are how you get a corpus rather than a search result:
 
 ```bash
 # every article published on one day, read in full
-spr sitemap --kind article --since 2026-08-18 | spr work -o json > day.jsonl
+spr sitemap --kind article --since 2026-08-18 | spr work --yes -o json > day.jsonl
 
 # every journal, as records
-spr sitemap --static journals | xargs -n1 -P1 spr journal -o json > journals.jsonl
+spr sitemap --static journals | spr journal --yes -o json > journals.jsonl
 ```
 
 Both of those are paced at the same one request per two seconds as everything else in this tool, and the second one is 3,405 requests, which is just under two hours. The bill is arithmetic you can do before you start, and `spr sitemap` prints it for the case where you would rather not.

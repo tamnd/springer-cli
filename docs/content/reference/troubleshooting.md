@@ -104,6 +104,26 @@ That is deliberate. A field coming out set that was not set before is a change t
 
 That page states no fact in more than one vocabulary, which is true of the search results page and of every container page. The cross-check needs two claims about one fact to have anything to compare, and a journal home page carries no bibliographic vocabulary at all.
 
+## `stdin is not a pipe, so there is nothing to read them from`
+
+The command was given no identifier and stdin is a terminal or `/dev/null`. Name a work, or pipe a list in. A tool that answered this by waiting silently until you found ctrl-D would be worse than the message.
+
+The other half of it, `nothing arrived on stdin`, means the pipe was there and carried no identifier. Blank lines and lines starting with `#` are skipped, so a file of nothing but comments reads as empty.
+
+## A pipe stopped and printed a bill
+
+More than twenty identifiers is billed before the first request, because two thousand at the default pace is an hour and ten minutes. Pass `--yes` to read them, pipe in fewer, or raise `--pace` if you are about to run for a while. This is the same twenty and the same flag `spr graph` uses.
+
+## A run of many exited 0 with restricted works in it
+
+That is the rule rather than a bug. One paywalled work in five hundred is not a restricted run, so a status becomes the run's exit code only when it covers every target. The counts are on stderr in the summary line, and `-o json` per record still carries each one's own status.
+
+## A run of many kept going after something failed
+
+Also the rule. A five hundred identifier run that died on the third would have spent twenty minutes pacing to tell you something it could tell you at the end. Each failure prints as `spr: <target>: <what went wrong>` on stderr as it happens, the summary counts them, and the exit code is the first real failure's.
+
+A reference list piped into `spr work` is the common case, and most of it fails on purpose. The measured article deposits 66 resolvable reference DOIs, 13 of them are Springer's and the other 53 belong to IEEE, Elsevier, MIT Press and ACM, so this site has no page for them. Those are the failures, and they are correct.
+
 ## The binary is not on your PATH
 
 `go install` puts the binary in `$(go env GOPATH)/bin`, usually `~/go/bin`, and a release archive leaves it wherever you unpacked it. See [installation](/getting-started/installation/).
