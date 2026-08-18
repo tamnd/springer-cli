@@ -53,6 +53,13 @@ const (
 	// CodeRateLimited is an upstream saying, in a header, that the budget is
 	// spent. Waiting is the fix and the message says how long.
 	CodeRateLimited = 6
+
+	// CodeDrift is spr verify finding that what it read no longer matches what
+	// the ledger recorded. It is its own code because it is the one failure in
+	// this tool that is a statement about the site rather than about the run,
+	// and a CI job that wants to alert on it should not have to tell it apart
+	// from a mistyped flag.
+	CodeDrift = 7
 )
 
 // ExitError carries a process exit code out of a command.
@@ -135,6 +142,7 @@ func Root() *cobra.Command {
 		citedByCmd(),
 		apiCmd(),
 		extractionCmd(),
+		verifyCmd(),
 		versionCmd(),
 		cacheCmd(),
 	)

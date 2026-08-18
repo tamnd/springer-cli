@@ -9,8 +9,8 @@ import (
 // extract runs the extractor over one named capture.
 func extract(t *testing.T, file string) *Work {
 	t.Helper()
-	for _, c := range captures {
-		if c.file != file {
+	for _, c := range Captures {
+		if c.File != file {
 			continue
 		}
 		w, err := ExtractWork(load(t, c))
@@ -384,12 +384,12 @@ func TestAbsentMeansAbsent(t *testing.T) {
 // A page that is not one of the four work types is not an error to be caught,
 // it is a plain answer.
 func TestContainerPagesAreNotWorks(t *testing.T) {
-	for _, c := range captures {
-		if c.kind != "" {
+	for _, c := range Captures {
+		if c.Kind != "" {
 			continue
 		}
 		if _, err := ExtractWork(load(t, c)); err != ErrNotAWork {
-			t.Errorf("%s: err = %v, want ErrNotAWork", c.file, err)
+			t.Errorf("%s: err = %v, want ErrNotAWork", c.File, err)
 		}
 	}
 }
@@ -397,25 +397,25 @@ func TestContainerPagesAreNotWorks(t *testing.T) {
 // The four work types share one record and no field is invented for one type
 // and faked for the others.
 func TestAllFourWorkTypes(t *testing.T) {
-	for _, c := range captures {
-		if c.kind == "" {
+	for _, c := range Captures {
+		if c.Kind == "" {
 			continue
 		}
-		w := extract(t, c.file)
-		if w.Type != c.kind {
-			t.Errorf("%s: type = %q, want %q", c.file, w.Type, c.kind)
+		w := extract(t, c.File)
+		if w.Type != c.Kind {
+			t.Errorf("%s: type = %q, want %q", c.File, w.Type, c.Kind)
 		}
 		if w.DOI == "" || w.Title == "" {
-			t.Errorf("%s: doi = %q, title = %q", c.file, w.DOI, w.Title)
+			t.Errorf("%s: doi = %q, title = %q", c.File, w.DOI, w.Title)
 		}
 		if len(w.Authors) == 0 {
-			t.Errorf("%s: no authors", c.file)
+			t.Errorf("%s: no authors", c.File)
 		}
 		if w.Access.Free == nil {
-			t.Errorf("%s: no access declaration", c.file)
+			t.Errorf("%s: no access declaration", c.File)
 		}
-		if w.URL != c.url {
-			t.Errorf("%s: url = %q, want the requested one", c.file, w.URL)
+		if w.URL != c.URL {
+			t.Errorf("%s: url = %q, want the requested one", c.File, w.URL)
 		}
 	}
 }
@@ -424,14 +424,14 @@ func TestAllFourWorkTypes(t *testing.T) {
 // disagreement is a design decision that needs a person, so it is reported and
 // never resolved.
 func TestVocabulariesAgree(t *testing.T) {
-	for _, c := range captures {
+	for _, c := range Captures {
 		resp := load(t, c)
 		doc, err := parseDoc(resp.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if d := ParseMeta(doc).CrossCheck(); len(d) > 0 {
-			t.Errorf("%s: the vocabularies disagree: %+v", c.file, d)
+			t.Errorf("%s: the vocabularies disagree: %+v", c.File, d)
 		}
 	}
 }

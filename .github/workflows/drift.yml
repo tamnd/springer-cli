@@ -3,13 +3,19 @@ name: drift
 # link.springer.com changes without telling anyone, and the failure mode is
 # quiet: a classifier that used to say Restricted starts saying OK, a pdf url
 # starts answering a pdf, a 404 starts being a 200. Every one of those looks
-# like the tool working. This runs the probes in scripts/drift.sh once a week
-# against the live site and opens an issue when one of them stops matching what
-# was measured.
+# like the tool working. This runs the probes in scripts/drift.sh against the
+# live site once a week, reads the fourteen ledger pages again with spr verify
+# --live, and opens an issue when either of them stops matching what was
+# measured.
 #
-# Weekly rather than nightly on purpose. Six requests is nothing, but a nightly
-# job that catches a change taking weeks to matter is somebody else's bandwidth
-# spent for our convenience.
+# The job reports and does not fail. A red weekly job is a weekly job everybody
+# learns to scroll past, and none of this is a broken build: it is news about
+# somebody else's website. A red run here means the workflow itself broke, which
+# is worth telling apart from the site moving.
+#
+# Weekly rather than nightly on purpose. Twenty one requests is nothing, but a
+# nightly job that catches a change taking weeks to matter is somebody else's
+# bandwidth spent for our convenience.
 
 on:
   schedule:
@@ -28,7 +34,7 @@ concurrency:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -41,13 +47,32 @@ jobs:
         run: go build -o bin/spr ./cmd/spr
 
       # One run. The report goes to the step summary and to an artifact from
-      # this run rather than from a second one, because fetching the same six
+      # this run rather than from a second one, because fetching the same seven
       # pages twice to print the same thing twice is Springer paying for our
       # reporting.
       - name: probe the live site
+        id: probe
         run: |
           set -o pipefail
-          ./scripts/drift.sh 2>&1 | tee drift.txt
+          code=0
+          ./scripts/drift.sh 2>&1 | tee drift.txt || code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+      # The other half, and the stronger one. The probes ask whether five urls
+      # still behave; this asks whether the fourteen pages the extractor was
+      # measured against still read the same, field by field. --cache is a
+      # directory of its own so that the run cannot be answered by anything but
+      # the site.
+      #
+      # Exit 7 is drift. Exit 3 is nothing readable at all, which on a runner
+      # usually means the challenge, and is worth an issue for the same reason.
+      - name: read the ledger pages again
+        id: verify
+        run: |
+          set -o pipefail
+          code=0
+          ./bin/spr verify --live --cache "$RUNNER_TEMP/spr-cache" 2>&1 | tee verify.txt || code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
 
       - name: report
         if: always()
@@ -57,28 +82,57 @@ jobs:
             echo '```'
             cat drift.txt
             echo '```'
+            echo '### spr verify --live'
+            echo '```'
+            cat verify.txt
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: drift
-          path: drift.txt
+          path: |
+            drift.txt
+            verify.txt
           retention-days: 90
 
       # One open issue at a time. The title is fixed so a second week of the
-      # same drift comments rather than opening a duplicate.
-      - name: open or update the drift issue
-        if: failure() && github.event_name == 'schedule'
+      # same drift comments rather than opening a duplicate, and a week where
+      # everything matches again closes it rather than leaving a stale alarm
+      # open for somebody to rediscover.
+      - name: open, update or close the drift issue
+        if: always() && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
+          PROBE: ${{ steps.probe.outputs.code }}
+          VERIFY: ${{ steps.verify.outputs.code }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           title="drift: the site no longer answers the way it was measured"
           existing=$(gh issue list --state open --search "$title in:title" --json number -q '.[0].number')
-          body=$(printf '%s\n\n%s\n' \
-            'The weekly drift check failed. One of the urls the classifier is built on stopped behaving the way it did when it was measured, which is code to fix rather than a flake to retry.' \
-            "The run, with the per url report in its summary: $RUN")
+
+          if [ "${PROBE:-0}" = "0" ] && [ "${VERIFY:-0}" = "0" ]; then
+            if [ -n "$existing" ]; then
+              gh issue comment "$existing" --body "Every probe matched again and the fourteen ledger pages read the same as they were recorded, so this is closed. The run: $RUN"
+              gh issue close "$existing"
+            fi
+            exit 0
+          fi
+
+          what=""
+          if [ "${PROBE:-0}" != "0" ]; then
+            what="One of the urls the classifier is built on stopped behaving the way it did when it was measured."
+          fi
+          if [ "${VERIFY:-0}" != "0" ]; then
+            what="$what A page the ledger covers no longer reads the way it was recorded, which spr verify --live reported with exit ${VERIFY}."
+          fi
+
+          body=$(printf '%s\n\n%s\n\n%s\n' \
+            "$what" \
+            'This is code to fix or a ledger to update, not a flake to retry. Run scripts/drift.sh and spr verify --live locally before changing either.' \
+            "The run, with both reports in its summary: $RUN")
+
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body "$body"
           else

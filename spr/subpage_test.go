@@ -297,7 +297,7 @@ func TestFigureCarriesTheFullRendition(t *testing.T) {
 
 	// The article page states 685x244 for the same figure, so the two
 	// renditions are genuinely different assets and not one url twice.
-	w, err := ExtractWork(load(t, captures[0]))
+	w, err := ExtractWork(load(t, Captures[0]))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,7 +392,7 @@ func TestOutOfRangeSubpageIsNotAnError200(t *testing.T) {
 }
 
 func TestSubpageExtractorsRefuseTheWrongPage(t *testing.T) {
-	article := load(t, captures[0])
+	article := load(t, Captures[0])
 	if _, err := ExtractMetrics(article); err != ErrNotMetrics {
 		t.Errorf("an article page extracted as metrics: %v", err)
 	}
@@ -454,7 +454,7 @@ func TestSubpagePaths(t *testing.T) {
 // what the Table record on a work is for: a caption, an anchor and a pointer,
 // and no rows, because there are no rows on that page to read.
 func TestTheArticlePageAnnouncesTablesWithoutPublishingThem(t *testing.T) {
-	w, err := ExtractWork(load(t, captures[0]))
+	w, err := ExtractWork(load(t, Captures[0]))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -476,7 +476,7 @@ func TestTheArticlePageAnnouncesTablesWithoutPublishingThem(t *testing.T) {
 	// figures on the same page ship their images inline, which is the contrast
 	// that makes the tables subpage a fetch you cannot avoid and the figures
 	// subpage a fetch you make only for resolution.
-	if n := len(findTag(mustDoc(t, captures[0]), atom.Table)); n != 0 {
+	if n := len(findTag(mustDoc(t, Captures[0]), atom.Table)); n != 0 {
 		t.Errorf("the article page has %d table elements, and the reason spr tables makes a request is gone", n)
 	}
 	if len(w.Figures) == 0 || w.Figures[0].Image == "" {
@@ -484,7 +484,7 @@ func TestTheArticlePageAnnouncesTablesWithoutPublishingThem(t *testing.T) {
 	}
 }
 
-func mustDoc(t *testing.T, c capture) *html.Node {
+func mustDoc(t *testing.T, c Capture) *html.Node {
 	t.Helper()
 	doc, err := parseDoc(load(t, c).Body)
 	if err != nil {
@@ -498,7 +498,7 @@ func mustDoc(t *testing.T, c capture) *html.Node {
 // label, and the prose is in the description below the image under the same
 // bottom-caption region the figure subpage uses.
 func TestAFigureLabelIsNotItsCaption(t *testing.T) {
-	w, err := ExtractWork(load(t, captures[0]))
+	w, err := ExtractWork(load(t, Captures[0]))
 	if err != nil {
 		t.Fatal(err)
 	}

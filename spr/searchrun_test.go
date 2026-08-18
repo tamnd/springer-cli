@@ -32,8 +32,8 @@ type searchServer struct {
 func (s *searchServer) start() (*Client, func()) {
 	s.t.Helper()
 	body := func(file string) []byte {
-		for _, c := range append(append([]capture{}, captures...), feeds...) {
-			if c.file == file {
+		for _, c := range append(append([]Capture{}, Captures...), feeds...) {
+			if c.File == file {
 				return load(s.t, c).Body
 			}
 		}

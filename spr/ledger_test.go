@@ -2,21 +2,15 @@ package spr
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 )
 
-// The capture ledger.
-//
-// testdata/capture.txt records, per capture, which fields the extractor set,
-// which it named as missed, how many regions it left unread, and the site
-// specific signals. TestCaptureLedger runs the right extractor over each of the
-// fourteen captures, nine records between them, and compares. The comparison
-// has three outcomes and they are deliberately not the same:
+// TestCaptureLedger runs the reading in ledger.go over each of the fourteen
+// stored captures and compares it with testdata/capture.txt. The comparison has
+// outcomes that are deliberately not the same:
 //
 //   - Fewer fields set, or more missed. A regression. Fails.
 //   - More fields set. An improvement, and it fails until the ledger is
@@ -31,188 +25,24 @@ var update = flag.Bool("update", false, "rewrite testdata/capture.txt from the c
 
 const ledgerPath = "testdata/capture.txt"
 
-// ledgerEntry is one capture's line in the ledger, parsed back.
-type ledgerEntry struct {
-	name    string
-	fields  []string
-	missed  []string
-	unread  int
-	vocabs  string
-	jsonld  int
-	agreed  string
-	metas   int
-	regions int
-	layer   string
-	record  string
-}
-
-// report runs the extractor over one capture and describes what came out.
-func report(t *testing.T, c capture) ledgerEntry {
+// read runs the extractor over one capture, failing the test rather than
+// returning an error, which is the only difference between this and what spr
+// verify does with the same function.
+func read(t *testing.T, c Capture) LedgerEntry {
 	t.Helper()
-	resp := load(t, c)
-	e := ledgerEntry{name: c.file, record: c.record}
-
-	doc, err := parseDoc(resp.Body)
+	e, err := ReadCapture(load(t, c), c)
 	if err != nil {
-		t.Fatalf("%s: %v", c.file, err)
+		t.Fatal(err)
 	}
-	meta := ParseMeta(doc)
-	ld := parseLinkData(doc)
-	reg := parseRegions(doc)
-
-	e.metas = len(meta.Names())
-	e.regions = len(reg.names())
-	e.jsonld = ld.count()
-
-	var vocabs []string
-	for _, v := range meta.Vocabularies() {
-		vocabs = append(vocabs, string(v))
-	}
-	e.vocabs = strings.Join(vocabs, "+")
-	if e.vocabs == "" {
-		e.vocabs = "none"
-	}
-
-	// The access declaration is stated twice on a work page, once in Highwire
-	// and once in schema.org. They agreed on all thirteen captures, which is the
-	// reason a disagreement is worth watching for.
-	e.agreed = accessAgreement(meta, ld)
-
-	// The analytics payload, which every page on this site ships twice. The
-	// assignment form is strict JSON and parses everywhere. The push form is
-	// JavaScript with single quotes and parses nowhere, and it is the one
-	// carrying the data-test attribute. The split is by form and not by page
-	// type, which is worth a column of its own precisely because it is easy to
-	// assume otherwise.
-	dl := parseDataLayer(doc)
-	e.layer = fmt.Sprintf("%d assigned, %d pushed, %d broken", len(dl.entries), len(dl.pushes), dl.broken)
-
-	env, err := extractCapture(resp, c)
-	if err != nil {
-		t.Fatalf("%s: %v", c.file, err)
-	}
-	for f := range env.Via {
-		e.fields = append(e.fields, f)
-	}
-	sort.Strings(e.fields)
-	for _, m := range env.Missed {
-		e.missed = append(e.missed, m.Field)
-	}
-	sort.Strings(e.missed)
-	e.unread = len(env.Unread)
 	return e
-}
-
-// extractCapture runs the extractor this capture is for and returns its
-// envelope, which is the only part of five different record types the ledger
-// compares.
-func extractCapture(resp *Response, c capture) (Envelope, error) {
-	switch c.record {
-	case "work":
-		w, err := ExtractWork(resp)
-		if err != nil {
-			return Envelope{}, err
-		}
-		if w.Type != c.kind {
-			return Envelope{}, fmt.Errorf("extracted as %q, want %q", w.Type, c.kind)
-		}
-		return w.Envelope, nil
-	case "journal":
-		j, err := ExtractJournal(resp)
-		if err != nil {
-			return Envelope{}, err
-		}
-		return j.Envelope, nil
-	case "book":
-		b, err := ExtractBook(resp)
-		if err != nil {
-			return Envelope{}, err
-		}
-		return b.Envelope, nil
-	case "series":
-		s, err := ExtractSeries(resp)
-		if err != nil {
-			return Envelope{}, err
-		}
-		return s.Envelope, nil
-	case "volumes":
-		v, err := ExtractVolumes(resp)
-		if err != nil {
-			return Envelope{}, err
-		}
-		return v.Envelope, nil
-	case "metrics":
-		m, err := ExtractMetrics(resp)
-		if err != nil {
-			return Envelope{}, err
-		}
-		return m.Envelope, nil
-	case "figure":
-		f, err := ExtractFigure(resp)
-		if err != nil {
-			return Envelope{}, err
-		}
-		return f.Envelope, nil
-	case "table":
-		t, err := ExtractTable(resp)
-		if err != nil {
-			return Envelope{}, err
-		}
-		return t.Envelope, nil
-	case "search":
-		s, err := ExtractSearch(resp)
-		if err != nil {
-			return Envelope{}, err
-		}
-		return s.Envelope, nil
-	}
-	return Envelope{}, fmt.Errorf("no extractor is registered for record %q", c.record)
-}
-
-// accessAgreement compares the two independent access declarations.
-func accessAgreement(m *Meta, ld *linkData) string {
-	raw := m.First("access")
-	work := ld.work()
-	var free *bool
-	if work != nil {
-		free = work.IsAccessibleForFree
-	}
-	switch {
-	case raw == "" && free == nil:
-		return "neither"
-	case raw == "" || free == nil:
-		return "one only"
-	case strings.EqualFold(raw, "yes") == *free:
-		return "agree"
-	default:
-		return "DISAGREE"
-	}
-}
-
-func (e ledgerEntry) String() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n", e.name)
-	fmt.Fprintf(&b, "  record       %s\n", e.record)
-	fmt.Fprintf(&b, "  meta names   %d\n", e.metas)
-	fmt.Fprintf(&b, "  json-ld      %d\n", e.jsonld)
-	fmt.Fprintf(&b, "  vocabularies %s\n", e.vocabs)
-	fmt.Fprintf(&b, "  data-test    %d\n", e.regions)
-	fmt.Fprintf(&b, "  datalayer    %s\n", e.layer)
-	fmt.Fprintf(&b, "  access       %s\n", e.agreed)
-	fmt.Fprintf(&b, "  unread       %d\n", e.unread)
-	fmt.Fprintf(&b, "  set          %s\n", strings.Join(e.fields, " "))
-	if len(e.missed) > 0 {
-		fmt.Fprintf(&b, "  missed       %s\n", strings.Join(e.missed, " "))
-	}
-	return b.String()
 }
 
 func TestCaptureLedger(t *testing.T) {
 	var got strings.Builder
-	got.WriteString(ledgerHeader)
-	entries := make([]ledgerEntry, 0, len(captures))
-	for _, c := range captures {
-		e := report(t, c)
+	got.WriteString(LedgerHeader)
+	entries := make([]LedgerEntry, 0, len(Captures))
+	for _, c := range Captures {
+		e := read(t, c)
 		entries = append(entries, e)
 		got.WriteString("\n")
 		got.WriteString(e.String())
@@ -236,138 +66,136 @@ func TestCaptureLedger(t *testing.T) {
 
 	// The ledger moved. Say which way, because a field appearing and a field
 	// disappearing are different pieces of news and only one of them is a bug.
-	wantEntries := parseLedger(string(want))
+	recorded := ParseLedger(string(want))
+	failed := false
 	for _, e := range entries {
-		w, ok := wantEntries[e.name]
+		w, ok := recorded[e.Name]
 		if !ok {
-			t.Errorf("%s: not in the ledger", e.name)
+			t.Errorf("%s: not in the ledger", e.Name)
+			failed = true
 			continue
 		}
-		gained, lost := diff(w.fields, e.fields)
-		if len(lost) > 0 {
-			t.Errorf("%s: stopped setting %s, which is a regression", e.name, strings.Join(lost, " "))
-		}
-		if len(gained) > 0 {
-			t.Errorf("%s: now sets %s, which is an improvement; rerun with -update to record it", e.name, strings.Join(gained, " "))
-		}
-		gainedMiss, lostMiss := diff(w.missed, e.missed)
-		if len(gainedMiss) > 0 {
-			t.Errorf("%s: now misses %s", e.name, strings.Join(gainedMiss, " "))
-		}
-		if len(lostMiss) > 0 {
-			t.Errorf("%s: no longer misses %s; rerun with -update to record it", e.name, strings.Join(lostMiss, " "))
-		}
-		if w.unread != e.unread {
-			t.Logf("drift: %s unread regions went from %d to %d", e.name, w.unread, e.unread)
-		}
-		if w.vocabs != e.vocabs {
-			t.Errorf("%s: vocabularies went from %s to %s", e.name, w.vocabs, e.vocabs)
-		}
-		if w.agreed != e.agreed {
-			t.Errorf("%s: the two access declarations went from %q to %q", e.name, w.agreed, e.agreed)
-		}
-		if w.jsonld != e.jsonld {
-			t.Errorf("%s: json-ld blocks went from %d to %d", e.name, w.jsonld, e.jsonld)
-		}
-		if w.layer != e.layer {
-			t.Errorf("%s: the analytics payload went from %q to %q", e.name, w.layer, e.layer)
-		}
-	}
-	t.Errorf("the ledger and the extractor disagree; rerun with -update once the differences above are understood")
-}
-
-// parseLedger reads back what String wrote. It is deliberately a small hand
-// parser rather than a serialization format, because the ledger's first job is
-// to be read by a person in a pull request diff.
-func parseLedger(s string) map[string]ledgerEntry {
-	out := map[string]ledgerEntry{}
-	var cur *ledgerEntry
-	for _, line := range strings.Split(s, "\n") {
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if !strings.HasPrefix(line, "  ") {
-			if cur != nil {
-				out[cur.name] = *cur
-			}
-			cur = &ledgerEntry{name: strings.TrimSpace(line), unread: -1}
-			continue
-		}
-		if cur == nil {
-			continue
-		}
-		key, value, ok := strings.Cut(strings.TrimSpace(line), " ")
-		if !ok {
-			continue
-		}
-		value = strings.TrimSpace(value)
-		switch key {
-		case "set":
-			cur.fields = strings.Fields(value)
-		case "missed":
-			cur.missed = strings.Fields(value)
-		case "unread":
-			_, _ = fmt.Sscanf(value, "%d", &cur.unread)
-		case "vocabularies":
-			cur.vocabs = value
-		case "access":
-			cur.agreed = value
-		case "json-ld":
-			_, _ = fmt.Sscanf(value, "%d", &cur.jsonld)
-		case "meta":
-			_, _ = fmt.Sscanf(value, "names %d", &cur.metas)
-		case "data-test":
-			_, _ = fmt.Sscanf(value, "%d", &cur.regions)
-		case "datalayer":
-			cur.layer = value
-		case "record":
-			cur.record = value
-		}
-	}
-	if cur != nil {
-		out[cur.name] = *cur
-	}
-	return out
-}
-
-// diff returns what is in b and not a, and what is in a and not b.
-func diff(a, b []string) (gained, lost []string) {
-	in := func(xs []string, s string) bool {
-		for _, x := range xs {
-			if x == s {
-				return true
+		d := CompareLedger(w, e)
+		switch d.Verdict() {
+		case VerdictOK:
+		case VerdictDrift:
+			t.Logf("drift: %s: %s", e.Name, strings.Join(d.Lines(), ", "))
+		default:
+			failed = true
+			for _, line := range d.Lines() {
+				t.Errorf("%s: %s", e.Name, line)
 			}
 		}
-		return false
 	}
-	for _, s := range b {
-		if !in(a, s) {
-			gained = append(gained, s)
-		}
+	if failed {
+		t.Errorf("the ledger and the extractor disagree; rerun with -update once the differences above are understood")
+		return
 	}
-	for _, s := range a {
-		if !in(b, s) {
-			lost = append(lost, s)
-		}
-	}
-	return gained, lost
+
+	// Every entry graded ok or drift and the bytes still differ, which means the
+	// prose at the top moved or a capture left the table. That is a real
+	// difference, and the ledger is a file people read in a diff, so it is not
+	// waved through.
+	t.Errorf("the ledger text changed without any entry regressing; rerun with -update to record it")
 }
 
-const ledgerHeader = `# The capture ledger.
-#
-# Fourteen real pages across nine record types, fetched 2026-08-18, extracted by the current code.
-#
-# Fewer fields set or more missed is a regression and fails. More fields set is an improvement
-# and also fails, until this file is updated, so that an improvement is always a reviewed change.
-# A change in unread regions is drift and is reported without failing, because Springer shipping
-# a new component is news about the site rather than a bug in this tool.
-#
-# The datalayer line counts the two analytics forms separately. Assigned is window.dataLayer =
-# [{...}], which is strict JSON and parses on every page. Pushed is window.dataLayer.push({...}),
-# which is javascript and parses on none of them, and is carried to the envelope unread. Both
-# numbers are non zero on every capture here except the search page, which ships three pushed
-# blocks and no assigned one, so it is the only page on this site whose whole analytics payload
-# is unreadable. Everywhere else the readable and unreadable split is by form and not by page.
-#
-# Rewrite with: go test ./spr -run TestCaptureLedger -update
-`
+// The ledger this binary carries has to be the one on disk, because spr verify
+// reads the embedded copy and TestCaptureLedger reads the file, and a check
+// that quietly compares against a stale copy of itself is worse than no check.
+func TestTheEmbeddedLedgerIsTheFileOnDisk(t *testing.T) {
+	onDisk, err := os.ReadFile(ledgerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(onDisk) != ledgerFile {
+		t.Error("the embedded ledger and testdata/capture.txt differ, which cannot happen from a clean build")
+	}
+	if len(Ledger()) != len(Captures) {
+		t.Errorf("the ledger holds %d entries for %d captures", len(Ledger()), len(Captures))
+	}
+}
+
+// A verdict is graded on what changed rather than on how much, and a reading
+// that both gained and lost a field is a regression rather than a draw.
+func TestAVerdictWeighsALossOverAGain(t *testing.T) {
+	want := LedgerEntry{Fields: []string{"title", "doi"}, Unread: 4}
+	got := LedgerEntry{Fields: []string{"title", "abstract"}, Unread: 4}
+
+	d := CompareLedger(want, got)
+	if v := d.Verdict(); v != VerdictRegression {
+		t.Errorf("verdict = %q, want %q", v, VerdictRegression)
+	}
+	if len(d.Lost) != 1 || d.Lost[0] != "doi" {
+		t.Errorf("lost = %v, want [doi]", d.Lost)
+	}
+	if len(d.Gained) != 1 || d.Gained[0] != "abstract" {
+		t.Errorf("gained = %v, want [abstract]", d.Gained)
+	}
+
+	// Unread on its own is drift and never a failure.
+	drift := CompareLedger(LedgerEntry{Unread: 4}, LedgerEntry{Unread: 5})
+	if v := drift.Verdict(); v != VerdictDrift {
+		t.Errorf("verdict = %q, want %q", v, VerdictDrift)
+	}
+
+	// A vocabulary disappearing outranks a field arriving, because a page that
+	// dropped Dublin Core is about to empty a field nobody is watching.
+	moved := CompareLedger(
+		LedgerEntry{Vocabularies: "highwire+dc+prism", Fields: []string{"title"}},
+		LedgerEntry{Vocabularies: "highwire+prism", Fields: []string{"title", "abstract"}},
+	)
+	if v := moved.Verdict(); v != VerdictChanged {
+		t.Errorf("verdict = %q, want %q", v, VerdictChanged)
+	}
+}
+
+// The vocabularies agree on every capture, which is the finding, so the check
+// reports the agreements rather than printing an empty list that looks the same
+// whether it ran or not.
+func TestVocabularyReadingReportsAgreements(t *testing.T) {
+	c, ok := CaptureNamed("article_oa")
+	if !ok {
+		t.Fatal("article_oa is not in the capture table")
+	}
+	rows, err := ReadVocabularies(load(t, c))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) < 5 {
+		t.Fatalf("%d facts are stated by more than one vocabulary, want several", len(rows))
+	}
+	var access bool
+	for _, r := range rows {
+		if !r.Agree {
+			t.Errorf("%s disagrees across vocabularies: %v", r.Fact, r.Claims)
+		}
+		if len(r.Claims) < 2 {
+			t.Errorf("%s was reported with %d claim, which is not a cross check", r.Fact, len(r.Claims))
+		}
+		if r.Fact == "access" {
+			access = true
+		}
+	}
+	if !access {
+		t.Error("the two access declarations were not compared, which is the one people care about")
+	}
+}
+
+// Naming a capture works with or without the extension, because somebody
+// passing --capture article_oa should not have to know it is stored as html.
+func TestCapturesAreNamedWithOrWithoutTheExtension(t *testing.T) {
+	a, ok := CaptureNamed("article_oa")
+	if !ok {
+		t.Fatal("article_oa did not resolve")
+	}
+	b, ok := CaptureNamed("article_oa.html")
+	if !ok {
+		t.Fatal("article_oa.html did not resolve")
+	}
+	if a != b {
+		t.Errorf("the two spellings resolved to %v and %v", a, b)
+	}
+	if _, ok := CaptureNamed("no_such_page"); ok {
+		t.Error("a name that is not in the table resolved anyway")
+	}
+}

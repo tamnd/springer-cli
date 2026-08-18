@@ -59,8 +59,8 @@ title         Aleatoric and epistemic uncertainty in machine learning: an introd
 published in  Machine Learning 110(3) pp 457-506
 access        free to read, access=Yes, world readable declared and empty
 ...
-envelope     html, ok, 718572 bytes, 3 redirects, fetched 2026-08-18 10:12:04 UTC
-             40 fields answered, 0 missed, 50 regions unread
+envelope     html, ok, 718371 bytes, 3 redirects, fetched 2026-08-18 14:43:08 UTC
+             41 fields answered, 0 missed, 46 regions unread
 
 via
   authors                linkdata:author[]
@@ -124,9 +124,11 @@ Four of the facet parameters have to arrive quoted, `taxonomy="Machine Learning"
 A work page lists what a work cites. Nothing on link.springer.com lists what cites it, and the metrics page states a total attributed to Dimensions without naming a single citing work. So `spr cited-by` asks OpenAlex, which publishes the edges themselves, and `spr crossref --references` gets the other direction as identifiers rather than as rendered text:
 
 ```console
-$ spr crossref 10.1007/s10994-021-05946-3 --references | spr work
+$ spr crossref 10.1007/s10994-021-05946-3 --references > refs.txt
 crossref: 66 of 122 deposited references carry a doi, and 56 do not
 ```
+
+The identifiers go to stdout, one per line, and the count goes to stderr, so a pipe gets a clean list and a person watching still learns the list is partial.
 
 Fifty six of those 122 entries carry no DOI at all. They are unresolvable rather than missing, and a graph built from this list should say so rather than quietly having 66 edges where the paper has 122 references.
 
@@ -150,6 +152,29 @@ One of those can be joined to any other graph in the world. The other is a hash 
 The same rule kills citation edges. The article page prints 122 references and states a DOI for none of them, so the html tier produces zero `cites` edges, not weak ones. `--also crossref` reads the deposit and turns 66 of the same 122 into edges, and both counts are printed, because a graph that quietly has 66 edges where the paper has 122 references is a graph that lies by omission.
 
 Ten output formats, of which four are RDF, and the vocabulary is borrowed from schema.org, Dublin Core, PRISM, BIBO, FaBiO, CiTO and FRAPO down to exactly four local terms. Holding that budget is why the four containment edges share `dcterms:isPartOf` and are told apart by the object's `rdf:type`, and why ordered authorship is a plain `rdf:List` rather than a reified position. Under `--format nq` the fourth term is the tier, so a store can be asked what the html alone said, and dropping that column leaves valid N-Triples.
+
+## A parser that quietly reads two fields fewer looks exactly like one that is fine
+
+So there is a ledger. `spr/testdata/capture.txt` records, for each of the fourteen captured pages, how many meta names and JSON-LD blocks it carried, which vocabularies it declared, whether its two access statements agreed, which fields came out set, which were looked for and missed, and how many `data-test` regions nobody read. It is a text file that a diff explains itself in.
+
+`go test ./spr` reads it against the frozen bytes, which proves the extractor did not change. That is only half the question, and it is the easier half: bytes in a repository cannot tell you the site moved. So the same code ships in the binary, and `spr verify` produces the same reading from pages fetched today.
+
+```console
+$ spr verify --live
+source     a live refetch
+ledger     14 captures recorded in the ledger this binary was built with
+
+ok          article_oa.html
+ok          article_subscription.html
+...
+14 ok
+```
+
+Fewer fields set is a regression and is this tool's fault. More fields set is an improvement, and it is reported until somebody records it, because an improvement nobody noticed is how a tool ends up with two versions of what it promises. A vocabulary appearing or disappearing is the site restating a fact and needs a person. A change in unread regions is drift, is Springer shipping a component, and never fails. All of those exit 7, which is `verify` and nothing else, so a scheduled job can alert on the site moving without having to tell it apart from a mistyped flag.
+
+Every line says whether it was read from the cache or from the site, and repeats it on every finding rather than printing it once at the top. That is the one lesson here that was paid for: a cached page that had gone stale reported a regression that did not exist, and it took a live refetch to prove nothing had changed.
+
+`spr verify --vocab` asks the other half of the question. Eleven bibliographic facts are stated by more than one vocabulary and the access statement makes a twelfth, so a work page says its own title in Highwire and in Dublin Core and its own DOI in Highwire and in PRISM. Across the fourteen pages that is 75 comparisons and every one of them agrees, which is exactly why a disagreement would be worth printing.
 
 ## Install
 
@@ -203,6 +228,9 @@ spr extraction authors
 spr extraction journal.title
 spr extraction --record book
 spr extraction --rung selector
+spr verify                                      # do the ledger's pages still read the same
+spr verify --live                               # ask the site rather than the cache
+spr verify --vocab --capture article_oa         # what each vocabulary claims about one fact
 spr get /article/10.1007/s10994-021-05946-3     # fetch and classify one url
 spr get --body /journal/10994 > journal.html    # the raw page
 spr get -o json '/search.rss?query=uncertainty' # the same, as json
@@ -252,8 +280,11 @@ scripts/      drift.sh, the weekly live probe
 make build
 make test
 make fmt
-./scripts/drift.sh    # six live probes, the ones the classifier is built on
+./scripts/drift.sh    # seven live probes, the ones the classifier is built on
+spr verify --live     # the fourteen ledger pages, read again off the site
 ```
+
+`scripts/drift.sh` and `spr verify --live` are the two halves of the weekly job in `.github/workflows/drift.yml`. It reports and does not fail: a red weekly job is a weekly job everybody learns to scroll past, and none of this is a broken build. It opens one issue, comments on it the next week if the drift is still there, and closes it when the site comes back.
 
 ## Status
 

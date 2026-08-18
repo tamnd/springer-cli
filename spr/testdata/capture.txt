@@ -14,6 +14,10 @@
 # blocks and no assigned one, so it is the only page on this site whose whole analytics payload
 # is unreadable. Everywhere else the readable and unreadable split is by form and not by page.
 #
+# This file is read twice: by TestCaptureLedger against the stored captures, and by spr verify
+# against the page cache or the live site. The first says the extractor did not change and the
+# second says the site did not.
+#
 # Rewrite with: go test ./spr -run TestCaptureLedger -update
 
 article_oa.html
