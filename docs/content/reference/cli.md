@@ -15,6 +15,7 @@ Run `spr <command> --help` for the full flag list on any command, and see [confi
 | Command | What it does |
 |---|---|
 | `get` | Fetch one url and report how it was classified |
+| `search` | Search link.springer.com, on both of the paths it answers on |
 | `work` | Read one article, chapter, protocol or reference work entry |
 | `journal` | Read one journal home page, and optionally its volumes and issues |
 | `book` | Read one book, proceedings volume or reference work |
@@ -46,6 +47,86 @@ spr get -o json '/search.rss?query=uncertainty'
 ```
 
 A bare path is resolved against `https://link.springer.com`. A full url is fetched as given, including urls on other hosts.
+
+## `spr search`
+
+```
+spr search [terms] [flags]
+```
+
+Runs one query against the two surfaces Springer serves it on and returns one merged answer.
+
+`/search.rss` is the primary path. It pages to the end of the result set, carries the full abstract on every item rather than a truncated card, states the bare DOI in `guid`, and it kept answering while the HTML surface was serving challenges.
+
+`/search` HTML is the enrichment pass. It is the only source of the total, the facet counts, and the per result content type, container and author list. One page of it is fetched for those, and `--enrich` fetches enough pages to cover the whole result set.
+
+The two paths do not agree on what the first twenty results are. Fetched for the same query in the same minute, HTML page 1 and RSS page 1 share 3 of 20, because the HTML honours `sortBy` and the feed ignores it and always answers newest first. So the join is on DOI and never on position, every result says which path it came from, and a result built from both says `rss+html`.
+
+| Flag | Meaning |
+|---|---|
+| `--type` | Content type, repeatable: `article`, `research`, `review`, `news`, `book`, `chapter`, `conference paper` |
+| `--open-access` | Open access only |
+| `--from`, `--to` | Earliest and latest publication year |
+| `--last` | Relative window instead of a year range: `m3`, `m6`, `m12` or `m24` |
+| `--language` | Language code, repeatable: `En`, `De` |
+| `--taxonomy` | Taxonomy term, repeatable, quoted for you |
+| `--discipline` | Discipline, repeatable, quoted for you |
+| `--sub-discipline` | Sub-discipline, repeatable, quoted for you |
+| `--sdg` | Sustainable development goal, repeatable, quoted for you |
+| `--sort` | `relevance`, `date` or `oldest`, honoured by the HTML path only |
+| `--title`, `--contributor`, `--journal` | The field scoped inputs from advanced search |
+| `--limit` | How many results to return, 20 per page and fixed by the site |
+| `--page` | First page of results |
+| `--path` | Force one surface: `rss` or `html`, default is both |
+| `--enrich` | Fetch the HTML card fields for every result rather than the first page |
+| `--facets` | Print the facet groups and counts instead of the results, one request |
+| `--abstract` | Print each result's abstract, which the feed carries in full |
+| `--dry-run` | Print what this query would cost and make no requests |
+| `--envelope` | Print the whole envelope: every field, its source, what was missed and what was left unread |
+
+```bash
+spr search "aleatoric uncertainty"
+spr search "aleatoric uncertainty" --type article --from 2020 --to 2024
+spr search "uncertainty" --journal "Machine Learning" --open-access
+spr search "graph neural network" --taxonomy "Machine Learning" --sort date --limit 500
+spr search --title "uncertainty" --contributor "Hüllermeier"
+spr search "climate" --sdg "Climate action" --facets
+spr search "uncertainty" --limit 500 --dry-run
+```
+
+The taxonomy, discipline, sub-discipline and SDG values have to reach the site wrapped in double quotes. Sending them bare is a valid request that answers 200 and matches nothing, so the quotes are added for you and `--taxonomy "Machine Learning"` is what you type.
+
+`--facets` is one request and prints the shape of the result set before you decide to fetch it:
+
+```
+$ spr search "aleatoric uncertainty" --type article --from 2020 --to 2024 --facets
+557 results
+
+content-type                  Article 557, Research article 482, Review
+                              article 57, News article 1
+
+publishing-model              Open access 291
+
+language                      English 555, German 2
+
+taxonomy                      Machine learning 168, Artificial intelligence
+                              75, Statistical learning 67, ...
+```
+
+`--dry-run` bills the query first. Both search paths share one five second pace bucket, so 26 requests is over two minutes of waiting and it is worth knowing that up front:
+
+```
+$ spr search "uncertainty" --limit 500 --dry-run
+query         uncertainty
+path          /search.rss, 20 per page
+requests      25 rss pages + 1 html page for facets and the total
+pace          1 request / 5s, which both search paths share
+estimate      2 minutes
+```
+
+A run over five requests prints the same bill on stderr and then proceeds. It is not a prompt, because prompting breaks every pipeline this tool is meant to sit in.
+
+When the HTML pass is challenged, the search completes on RSS alone and stderr says so in the same breath rather than leaving a caller to notice that the facets are missing. A query that matched nothing exits 3, so that no results and a failed run are two different things to a script without either being parsed out of the output.
 
 ## `spr work`
 

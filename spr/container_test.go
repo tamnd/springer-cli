@@ -449,10 +449,15 @@ func TestContainerExtractorsRefuseTheWrongPage(t *testing.T) {
 	}
 }
 
-// Every page on this site ships two analytics payloads: an assignment that is
-// strict JSON and parses, and a push that is javascript and does not. The split
-// is by form, not by page type, and the article page is the one most likely to
-// be assumed otherwise.
+// Every content page on this site ships two analytics payloads: an assignment
+// that is strict JSON and parses, and a push that is javascript and does not.
+// The split is by form, not by page type, and the article page is the one most
+// likely to be assumed otherwise.
+//
+// The search page is the single exception and it is asserted here rather than
+// excluded quietly. It ships three pushes and no assignment at all, so it is
+// the one page on this site whose whole analytics payload is unreadable, and it
+// is also the one page that needs nothing from it.
 func TestBothAnalyticsFormsOnEveryPage(t *testing.T) {
 	for _, c := range captures {
 		doc, err := parseDoc(load(t, c).Body)
@@ -460,6 +465,15 @@ func TestBothAnalyticsFormsOnEveryPage(t *testing.T) {
 			t.Fatalf("%s: %v", c.file, err)
 		}
 		d := parseDataLayer(doc)
+		if c.record == "search" {
+			if d.ok() {
+				t.Errorf("%s: the search page now carries an assignment form, which is worth reading", c.file)
+			}
+			if len(d.pushes) != 3 {
+				t.Errorf("%s: %d push blocks, want 3", c.file, len(d.pushes))
+			}
+			continue
+		}
 		if !d.ok() {
 			t.Errorf("%s: the assignment form did not parse", c.file)
 		}

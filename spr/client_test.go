@@ -357,7 +357,7 @@ func TestResolve(t *testing.T) {
 		{"", "", true},
 	}
 	for _, tc := range cases {
-		got, err := resolve(tc.in)
+		got, err := (&Client{}).resolve(tc.in)
 		if tc.err {
 			if err == nil {
 				t.Errorf("resolve(%q) returned no error", tc.in)

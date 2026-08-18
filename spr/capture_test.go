@@ -5,13 +5,15 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
 
-// The captures are thirteen real pages, fetched on 2026-08-18, stored gzipped.
+// The captures are fourteen real pages and four feeds, fetched on 2026-08-18,
+// stored gzipped.
 //
-// Gzipped because the thirteen of them are 4.2 MB of html and 883 KB compressed,
+// Gzipped because the fourteen of them are 4.5 MB of html and 933 KB compressed,
 // and a repository carries its testdata forever. They are otherwise untouched
 // except for one substitution: the per request uuid in
 // ?error=cookies_not_supported&code=<uuid> is replaced with a run of zeroes, so
@@ -51,6 +53,36 @@ var captures = []capture{
 	{"metrics_subscription.html", "https://link.springer.com/article/10.1007/s10994-024-06594-z/metrics", "metrics", ""},
 	{"figure.html", "https://link.springer.com/article/10.1007/s10994-021-05946-3/figures/1", "figure", ""},
 	{"table.html", "https://link.springer.com/article/10.1007/s10994-021-05946-3/tables/1", "table", ""},
+	{"search.html", searchQueryURL, "search", ""},
+}
+
+// The query every search capture was taken with, html and rss alike, in the
+// same minute. It is one string so that the two paths cannot drift apart in the
+// testdata the way they did on the live site.
+const searchQuery = "query=aleatoric+uncertainty&content-type=Article&date=custom&dateFrom=2020&dateTo=2024&sortBy=relevance"
+
+const (
+	searchQueryURL = "https://link.springer.com/search?" + searchQuery
+	searchFeedURL  = "https://link.springer.com/search.rss?" + searchQuery
+)
+
+// The feeds are kept out of the capture table above because that table drives
+// the ledger, and the ledger reads meta names, json-ld blocks, data-test
+// regions and the analytics payload. A feed has none of those, and running an
+// html reader over it to produce four zeroes would be a row that looks like
+// evidence and is not.
+//
+// The three short ones are here for one finding each. The last page of the
+// result set carries 17 items rather than 20, which is what proves the
+// arithmetic. Page 29 is empty and carries the four characters null. Page 200
+// is empty and carries nothing at all. Both empties are 200 ok and they are
+// four bytes apart in size, which is the whole argument for terminating on the
+// item count.
+var feeds = []capture{
+	{"search.rss", searchFeedURL, "feed", ""},
+	{"search_last.rss", searchFeedURL + "&page=28", "feed", ""},
+	{"search_null.rss", searchFeedURL + "&page=29", "feed", ""},
+	{"search_empty.rss", searchFeedURL + "&page=200", "feed", ""},
 }
 
 // fetchedAt is the moment the captures were taken. The extractor stamps the
@@ -79,14 +111,34 @@ func load(t *testing.T, c capture) *Response {
 		t.Fatalf("capture %s: %v", c.file, err)
 	}
 
+	// The feed is served as xml and everything else as html, and the classifier
+	// takes the kind rather than guessing it, so the loader states it here the
+	// way the client would have.
+	kind := KindHTML
+	if strings.HasSuffix(c.file, ".rss") {
+		kind = KindXML
+	}
+
 	return &Response{
 		URL:     c.url,
 		Final:   c.url,
 		Code:    200,
 		Body:    body,
-		Status:  Classify(200, nil, body, KindHTML),
+		Status:  Classify(200, nil, body, kind),
 		Fetched: fetchedAt,
 		// Three, the cookie dance, which is what every one of these cost.
 		Redirects: 3,
 	}
+}
+
+// capturedFeed returns one named feed capture.
+func capturedFeed(t *testing.T, file string) *Response {
+	t.Helper()
+	for _, c := range feeds {
+		if c.file == file {
+			return load(t, c)
+		}
+	}
+	t.Fatalf("no feed capture named %s", file)
+	return nil
 }

@@ -60,6 +60,42 @@ envelope      html, ok, 718572 bytes, 3 redirects, fetched 2026-08-18 10:12:04 U
 
 Add `--envelope` to see which rung answered each field, and run `spr extraction` for the table of which rung is expected to answer what, and why. There is a longer walkthrough in [reading one work](/guides/reading-one-work/).
 
+## Find something to read
+
+`spr search` runs one query against the two surfaces Springer serves it on, `/search` and `/search.rss`, and returns one merged answer.
+
+```console
+$ spr search "aleatoric uncertainty" --type article --from 2020 --to 2024 --limit 5
+search: html enrichment matched 3 of its 20 results to the feed's by doi
+search: the other 17 are the two orderings disagreeing, and they are left out because only page 1 of the html was read, so pass --enrich to read the rest and keep them
+557 results, showing 5, via rss+html
+
+  1  An empirical method for modelling the secondary shock from high
+     explosives in the far-field
+     2024-12-28
+     10.1007/s00193-024-01208-y
+     https://link.springer.com/article/10.1007/s00193-024-01208-y
+...
+```
+
+Three of twenty is not a bug in either surface. The HTML honours `sortBy` and the feed ignores it and always answers newest first, so the two orderings are genuinely different and the results are joined on DOI rather than on position.
+
+`--facets` is one request and prints the shape of a result set before you spend anything on fetching it:
+
+```console
+$ spr search "aleatoric uncertainty" --type article --from 2020 --to 2024 --facets
+557 results
+
+content-type                  Article 557, Research article 482, Review
+                              article 57, News article 1
+
+publishing-model              Open access 291
+
+language                      English 555, German 2
+```
+
+`--dry-run` bills a long run first. Both search paths share a five second pace bucket of their own, so `--limit 500` is 26 requests and a little over two minutes. [Searching](/guides/searching/) covers why the feed is the primary path and which four parameters fail silently without their quotes.
+
 ## Read the thing it was published in
 
 ```bash

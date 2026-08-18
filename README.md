@@ -99,6 +99,16 @@ The article page carries every figure inline, so listing them costs nothing and 
 
 The article page carries no tables at all. The open access capture is 718 KB of html which announces one table, links to it, and contains zero `<table>` elements. So `spr work -o json` gives you a `tables` array of captions and links with no rows in it, deliberately, and `spr tables <doi> 1` is the only way to read one.
 
+## Two search paths that disagree
+
+`/search` and `/search.rss` are one query engine and two answers. Fetched for the same query in the same minute, HTML page 1 and RSS page 1 share 3 results out of 20.
+
+The feed is the primary path, because it pages to the end of the result set, carries the full abstract where the card carries 180 characters and an ellipsis, states the bare DOI in `guid`, and kept answering while the HTML surface was serving challenges. The HTML is the enrichment pass, because the total, the facet counts and the per result content type, container and author list exist there and nowhere else.
+
+They disagree because the HTML honours `sortBy` and the feed ignores it and always answers newest first. So the two are joined on DOI and never on position, joining them by index would have attached the wrong authors to 17 results in 20, and `spr search --sort relevance` says on stderr that the sort reached one path and not the other.
+
+Four of the facet parameters have to arrive quoted, `taxonomy="Machine Learning"` and three others. Unquoted is a valid request that answers 200 and matches nothing, which is the worst failure a search can have because it is indistinguishable from a query with no results. The quotes are added in one shared place and a test reads the requirement off a captured page.
+
 ## Install
 
 ```bash
@@ -114,6 +124,10 @@ docker run --rm ghcr.io/tamnd/spr:latest --help
 ## Usage
 
 ```bash
+spr search "aleatoric uncertainty"              # both search paths, one merged answer
+spr search "uncertainty" --type article --from 2020 --to 2024
+spr search "climate" --sdg "Climate action" --facets
+spr search "uncertainty" --limit 500 --dry-run  # what it costs before it costs it
 spr work 10.1007/s10994-021-05946-3             # one article, chapter, protocol or entry
 spr work --envelope /chapter/10.1007/978-3-030-58607-2_1
 spr work -o json 10.1007/s10994-021-05946-3 | jq .references
@@ -185,7 +199,7 @@ make fmt
 
 ## Status
 
-Building towards [v0.1.0](https://github.com/tamnd/springer-cli/issues/2). The client, its classifier, the identifiers, the work record, the container records and the subpages are in; search, sitemaps, the open indexes and the graph follow.
+Building towards [v0.1.0](https://github.com/tamnd/springer-cli/issues/2). The client, its classifier, the identifiers, the work record, the container records, the subpages and search are in; sitemaps, the open indexes and the graph follow.
 
 ## License
 
