@@ -72,6 +72,32 @@ spr series 558
 
 Three pages, three records, because a journal has an impact factor and no price and a book has four ISBNs and no volumes. [Reading a container](/guides/reading-a-container/) covers what each one carries and where it comes from.
 
+## Read how often it was read
+
+```console
+$ spr metrics 10.1007/s10994-021-05946-3
+accesses      134k, about 134,000, which the page calls an approximate count
+citations     1,906 per Dimensions
+attention     52
+  ranked      22,032nd of 474,090 tracked articles in all journals
+              95th percentile
+  ranked      1st of 29 tracked articles in Machine Learning
+              96th percentile
+```
+
+The counter travels with the count, because Crossref reports 1,553 citations for the same DOI and OpenAlex 1,563, and all three are correct about three different corpora. The rank comes with the size of the cohort it was ranked in, for the same reason: 96th percentile of 29 tracked articles is one article out of twenty-nine.
+
+## Read a figure or a table
+
+```bash
+spr figures 10.1007/s10994-021-05946-3       # 17 figures, off the article page, no extra request
+spr figures 10.1007/s10994-021-05946-3 1     # one figure at 1177 wide instead of 685
+spr tables 10.1007/s10994-021-05946-3        # the captions, which is all the article page has
+spr tables 10.1007/s10994-021-05946-3 1      # the rows
+```
+
+That last one is not a convenience. The article page announces its tables and contains zero `<table>` elements, so the rows are published on the subpage and nowhere else. [Counts and assets](/guides/counts-and-assets/) has the measurements.
+
 ## Take the raw page, or json
 
 ```bash

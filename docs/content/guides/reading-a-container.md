@@ -220,4 +220,4 @@ envelope     html, ok, 144018 bytes, 3 redirects, fetched 2026-08-18 10:57:40 UT
 
 ## What comes next
 
-Reading a container gives you a pointer to its subpages, and following those is the next command. Until then, the pointer is a url and `spr get --body` will fetch it.
+A work has three subpages of its own and [counts and assets](/guides/counts-and-assets/) covers them: how often it was read, its figures at full size, and the rows of its tables, which are not on the article page at all.

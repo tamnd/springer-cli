@@ -41,9 +41,19 @@ var workPaths = map[string]string{
 }
 
 // WorkType returns the content type a url addresses, or the empty string.
+//
+// A work's own subpages live under its path and are not the work. That has to
+// be decided here, on the url, because it cannot be decided on the page: a
+// /metrics, /figures/N or /tables/N page carries the parent article's entire
+// bibliographic head, all 66 meta names, so extracting one as a work succeeds
+// and quietly produces an article record with no body, no sections and no
+// references. The address is the only thing that says which page this is.
 func WorkType(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
+		return ""
+	}
+	if subpageOf(u.Path) {
 		return ""
 	}
 	for prefix, name := range workPaths {
@@ -52,6 +62,16 @@ func WorkType(raw string) string {
 		}
 	}
 	return ""
+}
+
+// subpageOf reports whether a path addresses one of a work's subpages rather
+// than the work itself.
+func subpageOf(path string) bool {
+	path = strings.TrimSuffix(path, "/")
+	if strings.HasSuffix(path, "/metrics") {
+		return true
+	}
+	return satelliteRe.MatchString(path)
 }
 
 // extractor holds the four rungs for one page plus the envelope being built.
@@ -534,16 +554,23 @@ func (x *extractor) body() {
 		w.Envelope.via("rails", LevelRegion, "section[data-title="+railTitle+"]")
 	}
 
+	// The two caption elements on a figure are not a caption and a subtitle.
+	// c-article-section__figure-caption holds "Fig. 1", which is the label, and
+	// the prose lives in the description below the image under the same
+	// bottom-caption region name the figure subpage uses. Reading the first as
+	// the caption gave every figure a caption equal to its own label, which
+	// looked like data and was not.
 	for _, n := range x.reg.all("figure") {
 		f := Figure{Label: attr(n, "data-title")}
-		for _, c := range findClass(n, "c-article-section__figure-caption") {
-			f.Caption = text(c)
-			break
+		if c := firstClass(n, "c-article-section__figure-caption"); c != nil {
+			if f.Label == "" {
+				f.Label = text(c)
+			}
+			if id := attr(c, "id"); id != "" {
+				f.Anchor = "#" + id
+			}
 		}
-		for _, d := range findClass(n, "c-article-section__figure-description") {
-			f.Description = text(d)
-			break
-		}
+		f.Caption = text(x.reg.firstIn(n, "bottom-caption"))
 		for _, a := range findTag(n, atom.A) {
 			if href := attr(a, "href"); strings.Contains(href, "/figures/") {
 				f.PageURL = absolute(href)
@@ -560,6 +587,29 @@ func (x *extractor) body() {
 	}
 	if len(w.Figures) > 0 {
 		w.Envelope.via("figures", LevelRegion, "[data-test=figure]")
+	}
+
+	// The tables the article announces. The caption element carries the article
+	// anchor as its own id, which is the one place on this page where the two
+	// are stated together, so it is read from there rather than from the link.
+	for _, n := range x.reg.all("inline-table") {
+		var t Table
+		if c := x.reg.firstIn(n, "table-caption"); c != nil {
+			t.Label, t.Caption = splitLabel(text(c))
+			if id := attr(c, "id"); id != "" {
+				t.Anchor = "#" + id
+			}
+		}
+		if a := x.reg.firstIn(n, "table-link"); a != nil {
+			t.PageURL = absolute(attr(a, "href"))
+		}
+		if t.Label == "" && t.Caption == "" && t.PageURL == "" {
+			continue
+		}
+		w.Tables = append(w.Tables, t)
+	}
+	if len(w.Tables) > 0 {
+		w.Envelope.via("tables", LevelRegion, "[data-test=inline-table]")
 	}
 
 	if n := equationCount(x.doc); n > 0 {

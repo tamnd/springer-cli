@@ -111,7 +111,8 @@ var Fields = []Field{
 	{"work", "pdf_url", LevelHighwire, "citation_pdf_url", "the publisher's own pointer, which is not always the url you would build"},
 	{"work", "api_url", LevelHighwire, "citation_springer_api_url", "the publisher's api pointer, with the api key stripped before it is stored"},
 	{"work", "sections", LevelRegion, "section[data-title]", "the section tree, and there are no id attributes on this page to hang it on"},
-	{"work", "figures", LevelRegion, "[data-test=figure]", "label, caption and description all sit on the article page already"},
+	{"work", "figures", LevelRegion, "[data-test=figure] and its bottom-caption", "the label and the prose are two elements, and the first of them prints Fig. 1 rather than a caption"},
+	{"work", "tables", LevelRegion, "[data-test=inline-table]", "the caption and the link, because the page announces its tables and publishes zero table elements"},
 	{"work", "references", LevelHighwire, "citation_reference", "122 on the open access capture, and zero on a chapter, a protocol or an entry"},
 	{"work", "ref_links", LevelSelector, ".c-article-references__links a", "the resolver links, 68 of 122, each naming its kind in data-track-action"},
 	{"work", "equations", LevelSelector, ".c-article-equation", "a count, and nothing above rung 4 states it"},
@@ -164,6 +165,44 @@ var Fields = []Field{
 	{"volumes", "volumes", LevelRegion, "[data-test=volumes-and-issues] .app-vol-and-issues-item", "472 KB with no JSON-LD at all, and the whole back catalogue for one request"},
 	{"volumes", "volume.year", LevelRegion, "the volume heading's own time element", "read off the printed span, because a volume can run January to August and span no whole year"},
 	{"volumes", "issue.date", LevelRegion, "time[datetime] inside the issue row", "a month, recorded as a month, rather than a day this tool would have invented"},
+
+	// The subpages. These are the one place in the table where a subsidiary
+	// page identifies its subject better than the container pages above it: a
+	// /metrics, /figures/N or /tables/N page carries the parent article's
+	// entire bibliographic head, all 66 meta names in Highwire, Dublin Core and
+	// PRISM, exactly as the article page does. So the work being counted or
+	// illustrated is named at rung 1 here while a journal's own home page
+	// cannot manage rung 1 for its own title.
+	//
+	// Everything the subpage adds on top of that inherited head is rung 3 or
+	// rung 4, and several rows are rung 4 for a reason worth stating: the
+	// numbers on a metrics page are drawn as a picture. An accesses count and a
+	// citation count are the same element with the same class, told apart only
+	// by the heading of the section they sit under, and the cohort comparison
+	// is one English sentence with no markup inside it at all.
+
+	{"metrics", "doi", LevelHighwire, "citation_doi", "the subpage carries the parent article's whole head, so the work counted is named at rung 1"},
+	{"metrics", "title", LevelHighwire, "citation_title", "stated in the head and again in the printed From line, and the head is the one that does not move"},
+	{"metrics", "article_url", LevelSelector, ".c-article-metrics__title a[href]", "the address is printed once, in the link back to the article, and no vocabulary states it"},
+	{"metrics", "updated", LevelSelector, ".c-article-metrics__updated", "a daily count with no date cannot be compared with anything, including a later reading of this page"},
+	{"metrics", "accesses", LevelSelector, ".app-article-metrics-count under the Accesses heading", "the count carries no data-test of its own and is told from the citation count by the section heading"},
+	{"metrics", "citations", LevelRegion, "[data-test=citation-count]", "the same class as the accesses count, and the only one of the two that names itself"},
+	{"metrics", "citations_source", LevelSelector, "the section's own prose, provided by X", "Springer says 1,906 where Crossref says 1,553, so a count with nobody's name on it is not a fact"},
+	{"metrics", "altmetric", LevelRegion, "[data-test=altmetric-score] img[alt] and the badge src", "stated twice on the same page, in an alt text and in a query parameter, and they agreed"},
+	{"metrics", "altmetric_breakdown", LevelRegion, "[data-test=metrics-counts] li", "the kind comes from the class suffix, because the printed noun is tweeters here and Mendeley there"},
+	{"metrics", "altmetric_cohorts", LevelSelector, "the donut caption's prose", "two comparisons in one sentence, all journals and this journal, and the sizes are what make them non comparable"},
+	{"metrics", "mentions", LevelRegion, "[data-test=metrics-mentions] .c-card-metrics", "the named coverage only, five cards against a breakdown counting 1,334, so the two are separate fields"},
+
+	{"figure", "article_title", LevelHighwire, "citation_title", "the parent article's head travels with its figure, so the work is named at rung 1"},
+	{"figure", "label", LevelRegion, "[data-test=top-caption]", "Fig. 1 as the publisher prints it, and the number is taken from the url rather than parsed back out"},
+	{"figure", "caption", LevelRegion, "[data-test=bottom-caption]", "printed below the image here and above it on the article page, which is why both are read by region"},
+	{"figure", "image", LevelRegion, "[data-test=figure] img", "the full rendition at 1177 wide, where the article page carries the same asset at 685"},
+	{"figure", "refs", LevelRegion, "[data-test=citation-ref]", "the link text is only the year and the whole reference sits in the title attribute, so both are kept"},
+
+	{"table", "article_title", LevelHighwire, "citation_title", "the same inherited head a figure page carries, and the same rung 1"},
+	{"table", "label", LevelSelector, ".c-article-satellite-title", "the tables page names one region in total, so its heading is read by class and split on the label"},
+	{"table", "caption", LevelSelector, ".c-article-satellite-title", "label and caption are printed as one string here where a figure gives them two elements"},
+	{"table", "rows", LevelSelector, ".c-article-table-container table", "the article page has zero table elements in 718 KB, so the body is published here and nowhere else"},
 }
 
 // FieldsNamed returns the table rows matching a name.
