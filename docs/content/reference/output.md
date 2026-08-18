@@ -44,6 +44,8 @@ spr get -o json "$url" || case $? in
 esac
 ```
 
+Those are the codes for one identifier. A run given many of them, or reading them off stdin, answers about the run instead: a status has to cover every single target before it becomes the run's code, because one paywalled work in five hundred is not a restricted run. The counts go to stderr either way. See [reading identifiers from stdin](/reference/cli/#reading-identifiers-from-stdin).
+
 ## Every record carries an envelope
 
 A record is not just fields. `spr work -o json` puts an `envelope` next to them:

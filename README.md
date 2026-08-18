@@ -124,11 +124,14 @@ Four of the facet parameters have to arrive quoted, `taxonomy="Machine Learning"
 A work page lists what a work cites. Nothing on link.springer.com lists what cites it, and the metrics page states a total attributed to Dimensions without naming a single citing work. So `spr cited-by` asks OpenAlex, which publishes the edges themselves, and `spr crossref --references` gets the other direction as identifiers rather than as rendered text:
 
 ```console
-$ spr crossref 10.1007/s10994-021-05946-3 --references > refs.txt
+$ spr crossref 10.1007/s10994-021-05946-3 --references | spr work --yes
 crossref: 66 of 122 deposited references carry a doi, and 56 do not
+spr: 13 of 66 read, 6 restricted, 53 failed
 ```
 
-The identifiers go to stdout, one per line, and the count goes to stderr, so a pipe gets a clean list and a person watching still learns the list is partial.
+The identifiers go to stdout, one per line, and the count goes to stderr, so the pipe gets a clean list and a person watching still learns the list is partial. Every command that takes one identifier takes any number of them and reads them a line at a time from stdin when it is given none, which is what makes that a pipeline rather than a sentence about `xargs`.
+
+Read the second line, because it is the honest answer and not a broken run. Thirteen of that paper's references are published by Springer and the other 53 are IEEE, Elsevier, MIT Press and ACM, and this site does not have them. Each one is named on stderr as it happens, the run does not stop for any of them, and six of the thirteen it did find are paywalled and printed their metadata anyway. A tool that reported that as 66 successes would be the reason somebody's corpus is quietly a fifth of what they think it is.
 
 Fifty six of those 122 entries carry no DOI at all. They are unresolvable rather than missing, and a graph built from this list should say so rather than quietly having 66 edges where the paper has 122 references.
 
@@ -198,6 +201,7 @@ spr search "uncertainty" --limit 500 --dry-run  # what it costs before it costs 
 spr work 10.1007/s10994-021-05946-3             # one article, chapter, protocol or entry
 spr work --envelope /chapter/10.1007/978-3-030-58607-2_1
 spr work -o json 10.1007/s10994-021-05946-3 | jq .references
+spr work --yes < dois.txt                       # or any number of them, off stdin
 spr journal 10994                               # a journal, by id or by either issn
 spr journal 10994 --volumes                     # 114 volumes and 348 issues
 spr book 978-3-031-28170-9                      # a book, by isbn or by doi

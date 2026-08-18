@@ -27,7 +27,7 @@ import (
 
 func metricsCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "metrics <doi, url or path>",
+		Use:   "metrics <doi, url or path>...",
 		Short: "Read the accesses, citations and attention a work has drawn",
 		Long: "metrics reads a work's /metrics subpage, which is the only page on this site that says\n" +
 			"how often the work was read and how often it was cited.\n\n" +
@@ -40,41 +40,61 @@ func metricsCmd() *cobra.Command {
 			"tracked article of a similar age, and against the tracked articles of a similar age in\n" +
 			"its own journal. On the measured capture those are 95th of 474,090 and 96th of 29, and\n" +
 			"quoting the second without the cohort size behind it is how a percentile lies.\n\n" +
-			"This subpage exists for articles. A chapter's /metrics answers 404.",
-		Args: cobra.ExactArgs(1),
+			"This subpage exists for articles. A chapter's /metrics answers 404.\n\n" +
+			"It takes any number of works and reads them one per line from stdin when it is given\n" +
+			"none.",
+		Args: cobra.ArbitraryArgs,
 		Example: "  spr metrics 10.1007/s10994-021-05946-3\n" +
 			"  spr metrics -o json 10.1007/s10994-021-05946-3 | jq .altmetric.cohorts\n" +
-			"  spr metrics -o json 10.1007/s10994-021-05946-3 | jq -r '.citations | \"\\(.count) per \\(.source)\"'",
+			"  spr metrics -o json 10.1007/s10994-021-05946-3 | jq -r '.citations | \"\\(.count) per \\(.source)\"'\n" +
+			"  spr sitemap --kind article --since 2026-08-01 | spr metrics --yes",
 	}
 
-	var envelope bool
+	var (
+		envelope bool
+		yes      bool
+	)
 	cmd.Flags().BoolVar(&envelope, "envelope", false, "print the whole envelope: every field, its source, what was missed and what was left unread")
+	cmd.Flags().BoolVar(&yes, "yes", false, "read more than "+fmt.Sprint(Targets)+" works without being billed first")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		target, err := metricsTarget(args[0])
+		list, err := targets(cmd, args, "work")
 		if err != nil {
+			return exit(CodeUsage, err)
+		}
+		if err := bill(cmd, list, yes, "works"); err != nil {
 			return err
 		}
-		resp, err := fetchSubpage(cmd, target)
-		if err != nil {
-			return err
-		}
-		m, err := spr.ExtractMetrics(resp)
-		if err != nil {
-			return exit(CodeNoData, err)
-		}
-
-		out := cmd.OutOrStdout()
-		if g.format == "json" {
-			if err := encode(out, m); err != nil {
-				return err
-			}
-			return statusExit(resp.Status)
-		}
-		printMetrics(out, m, envelope)
-		return statusExit(resp.Status)
+		return each(cmd, list, func(target string) error {
+			return oneMetrics(cmd, target, envelope)
+		})
 	}
 	return cmd
+}
+
+func oneMetrics(cmd *cobra.Command, arg string, envelope bool) error {
+	target, err := metricsTarget(arg)
+	if err != nil {
+		return err
+	}
+	resp, err := fetchSubpage(cmd, target)
+	if err != nil {
+		return err
+	}
+	m, err := spr.ExtractMetrics(resp)
+	if err != nil {
+		return exit(CodeNoData, err)
+	}
+
+	out := cmd.OutOrStdout()
+	if g.format == "json" {
+		if err := encode(out, m); err != nil {
+			return err
+		}
+		return statusExit(resp.Status)
+	}
+	printMetrics(out, m, envelope)
+	return statusExit(resp.Status)
 }
 
 func figuresCmd() *cobra.Command {

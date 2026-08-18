@@ -54,7 +54,7 @@ crossref: 66 of 122 deposited references carry a doi, and 56 do not
 The identifiers go to stdout and the count goes to stderr, so the list pipes cleanly into another command while a person watching still learns it is partial:
 
 ```bash
-spr crossref 10.1007/s10994-021-05946-3 --references | spr work
+spr crossref 10.1007/s10994-021-05946-3 --references | spr work --yes
 ```
 
 Fifty six of the 122 entries carry no DOI at all. Those are not lost, they are unresolvable, and a graph built from this list should say so rather than quietly having 66 edges where the paper has 122 references.
@@ -101,7 +101,7 @@ That total is 1,554 where the record two sections up says 1,563, measured in the
 `--by-year` is one request. A full listing of 1,554 works is eight, at 200 per page, so ask by year when the question is when a work was read and ask for the listing when the question is by whom:
 
 ```bash
-spr cited-by 10.1007/s10994-021-05946-3 -o json | jq -r '.works[].doi' | spr work
+spr cited-by 10.1007/s10994-021-05946-3 -o json | jq -r '.works[].doi' | spr work --yes
 ```
 
 A DOI costs one extra request, because the listing is keyed on the OpenAlex work id and the DOI has to be resolved first. Passing `W3014596384` skips that.
