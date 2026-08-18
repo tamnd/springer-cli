@@ -15,7 +15,7 @@ import (
 // testdata/capture.txt records, per capture, which fields the extractor set,
 // which it named as missed, how many regions it left unread, and the site
 // specific signals. TestCaptureLedger runs the right extractor over each of the
-// thirteen captures, eight records between them, and compares. The comparison
+// fourteen captures, nine records between them, and compares. The comparison
 // has three outcomes and they are deliberately not the same:
 //
 //   - Fewer fields set, or more missed. A regression. Fails.
@@ -159,6 +159,12 @@ func extractCapture(resp *Response, c capture) (Envelope, error) {
 			return Envelope{}, err
 		}
 		return t.Envelope, nil
+	case "search":
+		s, err := ExtractSearch(resp)
+		if err != nil {
+			return Envelope{}, err
+		}
+		return s.Envelope, nil
 	}
 	return Envelope{}, fmt.Errorf("no extractor is registered for record %q", c.record)
 }
@@ -349,7 +355,7 @@ func diff(a, b []string) (gained, lost []string) {
 
 const ledgerHeader = `# The capture ledger.
 #
-# Thirteen real pages across eight record types, fetched 2026-08-18, extracted by the current code.
+# Fourteen real pages across nine record types, fetched 2026-08-18, extracted by the current code.
 #
 # Fewer fields set or more missed is a regression and fails. More fields set is an improvement
 # and also fails, until this file is updated, so that an improvement is always a reviewed change.
@@ -359,8 +365,9 @@ const ledgerHeader = `# The capture ledger.
 # The datalayer line counts the two analytics forms separately. Assigned is window.dataLayer =
 # [{...}], which is strict JSON and parses on every page. Pushed is window.dataLayer.push({...}),
 # which is javascript and parses on none of them, and is carried to the envelope unread. Both
-# numbers are non zero on every capture here, so the readable and unreadable split is by form
-# and not by page type.
+# numbers are non zero on every capture here except the search page, which ships three pushed
+# blocks and no assigned one, so it is the only page on this site whose whole analytics payload
+# is unreadable. Everywhere else the readable and unreadable split is by form and not by page.
 #
 # Rewrite with: go test ./spr -run TestCaptureLedger -update
 `

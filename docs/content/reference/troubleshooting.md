@@ -14,7 +14,9 @@ The Fastly edge in front of `/search` served a client challenge instead of the p
 - It does **not clear by waiting**, so retrying in a minute gets you another one. spr never retries a challenge for exactly this reason.
 - It is scoped to **search only**. Article, journal, book and sitemap urls keep answering normally while search is challenged.
 
-Use `/search.rss` instead, which is not challenged and is the search path spr prefers anyway.
+`spr search` already handles this. The feed is its primary path, so a challenged html pass costs the total, the facet counts and the card fields and does not cost the results, and it says so on stderr in the same breath as the output. If both paths are challenged there is nothing to return and the exit code is 2, which is its own code because a challenge is a rate rather than a refusal and waiting is the fix.
+
+Reaching for `/search.rss` by hand with `spr get` works too, and is what `spr search --path rss` does for you.
 
 ## `status restricted`
 
@@ -39,6 +41,8 @@ An upstream is enforcing a budget it told us about in a header. spr reads those 
 ## Nothing found for something you expected
 
 The public surface is not the whole site. Check the spelling the site itself uses, and check the same url in a private browser window before concluding it is missing. A missing work answers 404, which spr reports as `not_found` and exit 3, so an empty result and a wrong url are easy to tell apart.
+
+For a search specifically, check the spelling of the facet value against `spr search "<terms>" --facets`, which prints the site's own labels and counts for one request. The four faceted parameters have to reach the site wrapped in double quotes and spr adds them for you, so a taxonomy or discipline that matches nothing is a value the site does not use rather than a value that arrived malformed. A query that matched nothing exits 3 and prints nothing, which is not the same as a run that failed.
 
 ## The binary is not on your PATH
 

@@ -95,3 +95,34 @@ func (e *Envelope) extra(name string, raw []byte) {
 func (e *Envelope) sortMissed() {
 	sort.Slice(e.Missed, func(i, j int) bool { return e.Missed[i].Field < e.Missed[j].Field })
 }
+
+// carry copies a provenance string that another envelope already wrote.
+//
+// It exists for the search run, which builds one envelope out of several
+// responses. Re-deriving the rung and the source would mean the merged record
+// claiming a provenance it did not itself establish.
+func (e *Envelope) carry(field, source string) {
+	if e.Via == nil {
+		e.Via = map[string]string{}
+	}
+	e.Via[field] = source
+}
+
+// record adds one response to an envelope that spans several of them.
+//
+// The first response stamps the time and the status, because a run is as fresh
+// as its earliest page and as healthy as its first answer. The bytes and the
+// urls accumulate, so a search across 25 feed pages reports what it actually
+// cost rather than what its last page cost.
+func (e *Envelope) record(resp *Response) {
+	if resp == nil {
+		return
+	}
+	if len(e.URLs) == 0 {
+		e.Fetched = resp.Fetched
+		e.Status = resp.Status
+	}
+	e.URLs = append(e.URLs, resp.URL)
+	e.Bytes += len(resp.Body)
+	e.Redirects += resp.Redirects
+}

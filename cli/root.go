@@ -120,6 +120,7 @@ func Root() *cobra.Command {
 
 	root.AddCommand(
 		getCmd(),
+		searchCmd(),
 		workCmd(),
 		journalCmd(),
 		bookCmd(),

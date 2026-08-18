@@ -93,6 +93,12 @@ type Client struct {
 	// Debug receives one line per request when set by --debug.
 	Debug io.Writer
 
+	// base overrides the site root, and is set only by tests so that a flow
+	// which constructs its own urls, like a paged search, can be pointed at a
+	// stub server. It is unexported and has no option, the same way the pacer's
+	// clock is, because it is a seam for tests and not a feature.
+	base string
+
 	// rate holds the last rate limit budget seen per host, read from the
 	// response rather than compiled in from a documentation page.
 	rateMu sync.Mutex
@@ -175,7 +181,7 @@ func New(opts ...Option) *Client {
 // Get fetches raw, which may be a full url or a path on link.springer.com, and
 // classifies the result against the kind the caller expects.
 func (c *Client) Get(ctx context.Context, raw string, want Kind) (*Response, error) {
-	target, err := resolve(raw)
+	target, err := c.resolve(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -372,13 +378,17 @@ func isRedirect(code int) bool {
 }
 
 // resolve turns a path or a url into an absolute url on this site.
-func resolve(raw string) (string, error) {
+func (c *Client) resolve(raw string) (string, error) {
+	base := Base
+	if c != nil && c.base != "" {
+		base = c.base
+	}
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", errors.New("empty url")
 	}
 	if strings.HasPrefix(raw, "/") {
-		return Base + raw, nil
+		return base + raw, nil
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
