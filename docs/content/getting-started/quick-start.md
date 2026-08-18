@@ -144,6 +144,16 @@ spr sitemap --kind article --since 2026-08-01 | spr work
 
 Urls go to stdout one per line and everything else goes to stderr, so that last line is a pipeline. The date in a shard's file name is a bucket and not a publication date, which is the one thing worth reading [the guide](/guides/sitemaps/) for before walking any of it.
 
+## Ask the hosts this site is not
+
+```bash
+spr crossref 10.1007/s10994-021-05946-3 --references   # the references as identifiers
+spr cited-by 10.1007/s10994-021-05946-3 --by-year      # who cites it, which the site never says
+spr search "uncertainty" --also crossref --also openalex
+```
+
+A work page lists what a work cites and nothing on the site lists what cites it, so that middle line is a direction link.springer.com has no page for. [The open indexes](/guides/open-indexes/) covers all three hosts and why no command here prints a merged citation count.
+
 ## Take the raw page, or json
 
 ```bash

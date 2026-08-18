@@ -109,6 +109,42 @@ var maps = []capture{
 	{"sitemap_journals_palgrave.xml", Base + "/sitemap-palgrave-journals.xml", "sitemap", ""},
 }
 
+// The open index answers, kept out of the capture table for the third time and
+// for the same reason: there is no html in any of them and the ledger reads
+// html.
+//
+// Eight responses across three hosts, fetched on 2026-08-18 in the same few
+// minutes, which matters more here than anywhere else in this directory. Two of
+// the findings these prove are disagreements between two numbers, and a
+// disagreement between two numbers read a week apart proves nothing at all.
+//
+// crossref_404 and springer_api_401 are the two failure shapes. Neither is
+// json, both are what the host actually sends, and both exist so that the
+// handling of them is tested against bytes rather than against an assumption
+// about what a well behaved API returns.
+var indexes = []capture{
+	{"crossref_work.json", CrossrefBase + "/10.1007/s10994-021-05946-3", "crossref", ""},
+	{"crossref_query.json", "https://api.crossref.org/works?query", "crossref", ""},
+	{"crossref_facets.json", "https://api.crossref.org/works?facet", "crossref", ""},
+	{"crossref_404.txt", CrossrefBase + "/10.1007/nope-nope-nope", "crossref", ""},
+	{"openalex_work.json", OpenAlexBase + "/doi:10.1007/s10994-021-05946-3", "openalex", ""},
+	{"openalex_cited_by.json", OpenAlexBase + "?filter=cites:W3014596384", "openalex", ""},
+	{"openalex_by_year.json", OpenAlexBase + "?filter=cites:W3014596384&group_by=publication_year", "openalex", ""},
+	{"springer_api_401.json", SpringerAPIBase + "/meta/v2/json?api_key=", "api", ""},
+}
+
+// capturedIndex returns one named open index capture.
+func capturedIndex(t *testing.T, file string) *Response {
+	t.Helper()
+	for _, c := range indexes {
+		if c.file == file {
+			return load(t, c)
+		}
+	}
+	t.Fatalf("no open index capture named %s", file)
+	return nil
+}
+
 // fetchedAt is the moment the captures were taken. The extractor stamps the
 // envelope from the response, so the tests hand it a fixed instant rather than
 // the clock, which keeps the ledger byte for byte reproducible.
@@ -136,10 +172,13 @@ func load(t *testing.T, c capture) *Response {
 	}
 
 	// The feeds and the sitemaps are served as xml, the shops map as text/plain,
-	// and everything else as html. The classifier takes the kind rather than
-	// guessing it, so the loader states it here the way the client would have.
+	// the open indexes as json, and everything else as html. The classifier
+	// takes the kind rather than guessing it, so the loader states it here the
+	// way the client would have.
 	kind := KindHTML
 	switch {
+	case strings.HasSuffix(c.file, ".json"):
+		kind = KindJSON
 	case strings.HasSuffix(c.file, ".rss"),
 		strings.HasSuffix(c.file, ".xml"),
 		strings.HasSuffix(c.file, ".txt"):

@@ -227,21 +227,23 @@ func (m *Meta) CrossCheck() []Divergence {
 	return out
 }
 
-// stripAPIKey removes the api_key parameter from the publisher's own api
-// pointer before it is stored.
-//
-// The tag ships with the parameter present and empty, so today this changes
-// nothing. It is here because the day it ships populated is the day a key ends
-// up in every cached record, every json file and every issue report made from
-// one, and that is not a thing you want to discover afterwards. Stripping at
-// the point of extraction means there is no path from the page to the output
-// that carries it.
 // dropDOIScheme removes the doi: prefix that PRISM writes and Highwire does
 // not. It is a scheme on an identifier and not part of the identifier.
 func dropDOIScheme(s string) string {
 	return strings.TrimPrefix(strings.TrimSpace(s), "doi:")
 }
 
+// stripAPIKey blanks the api_key parameter on a url.
+//
+// It started as one line of hygiene for the citation_springer_api_url meta tag,
+// which ships with the parameter present and empty, so on that path it changes
+// nothing. It is now the single chokepoint every url in this package passes
+// through before it is cached, printed or recorded, because the Springer Nature
+// API takes its key in the query string and there must be no path from a
+// configured key to a file on disk or a line on a terminal.
+//
+// The parameter is blanked and not removed. api_key= says a credential was
+// there and was taken out, and removing it would say there never was one.
 func stripAPIKey(raw string) string {
 	if raw == "" {
 		return ""

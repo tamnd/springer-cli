@@ -70,7 +70,7 @@ There is no `missed` key on that record because nothing was missed, which is the
 
 | Field | What it is for |
 |---|---|
-| `tier` | which surface produced the record: `html` today, and the api and the open indexes later |
+| `tier` | which surface produced the record: `html`, `rss`, `search`, `sitemap`, `crossref`, `openalex` or `api` |
 | `urls` | the requested urls, never the effective ones, because the effective url carries a per request uuid and is not an identifier |
 | `via` | which rung and which exact tag or region answered each field |
 | `missed` | every field that was looked for and did not arrive, each with the reason |

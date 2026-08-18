@@ -37,8 +37,33 @@ A challenge and a 404 are both cached. A work that does not exist still does not
 
 Three user agents were measured against the search challenge, including a current Chrome string, and it treated all three exactly the same. A flag that does nothing is worse than no flag.
 
+## The polite pools
+
+Crossref and OpenAlex both run a separate queue for callers who identify themselves. Set `--mailto` and requests to both hosts carry it, which is a faster queue and a nicer neighbour. Without it they go to the common pool, which works and is slower. `--debug` names the pool each request went to.
+
+Each host also has its own pace bucket. A limit link.springer.com sets says nothing about what Crossref will serve, so `spr search --also crossref` adds a request to the bill and nothing to the estimate.
+
+## The API key
+
+`spr api` is the only command that needs a credential. Everything else reads pages and open indexes that need none.
+
+The key is read from `SPRINGER_API_KEY` first and from the config file second, and `spr version` names which of the two answered without naming the key. It is never printed, never cached and never written to a record. It travels in the query string because that is the only way the endpoints accept one, and every url that reaches a log line, a cache key, an envelope or a record has it blanked out first, including the `citation_springer_api_url` the work page itself publishes with a key in it.
+
+The config file is `$XDG_CONFIG_HOME/spr/config`, or the platform config directory when that is unset. It is `key=value`, one per line, with `#` for a comment, and `api_key` is the only key it holds:
+
+```
+# ~/.config/spr/config
+api_key=your key here
+```
+
+That is deliberately the smallest format that can hold a credential. A file this tool reads a secret out of is not the place for an expressive syntax with an edge case in it.
+
+A missing key and a wrong key both answer 401 with an identical body, so a missing one is caught before the request is made rather than spending a request to be told something that cannot be told apart.
+
 ## Environment variables
 
 | Variable | Meaning |
 |---|---|
 | `XDG_CACHE_HOME` | Moves the default cache directory |
+| `XDG_CONFIG_HOME` | Moves the default config directory |
+| `SPRINGER_API_KEY` | The key for `spr api`, read before the config file |

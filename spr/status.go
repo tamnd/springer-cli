@@ -89,6 +89,16 @@ func Classify(code int, header http.Header, body []byte, want Kind) Status {
 	if code >= 400 {
 		return StatusNotFound
 	}
+	// The challenge and the access statement are findings about html served by
+	// link.springer.com. A json record from an open index that happens to carry
+	// the words Client Challenge is a paper about bot detection, and running
+	// either test over it would classify a real record as an interstitial.
+	if want == KindJSON {
+		if !want.Matches(header.Get("Content-Type"), body) {
+			return StatusWrongKind
+		}
+		return StatusOK
+	}
 	if Challenged(body) {
 		return StatusChallenged
 	}
