@@ -185,11 +185,13 @@ Every line says whether it was read from the cache or from the site, and repeats
 go install github.com/tamnd/springer-cli/cmd/spr@latest
 ```
 
-Or take a prebuilt binary from the [releases](https://github.com/tamnd/springer-cli/releases), or run the container image:
+Or take a prebuilt binary from the [releases](https://github.com/tamnd/springer-cli/releases), which cover Linux, macOS, Windows and FreeBSD and come with deb, rpm and apk packages, an SBOM per archive and a `checksums.txt` signed with keyless cosign. Or run the container image:
 
 ```bash
 docker run --rm ghcr.io/tamnd/spr:latest --help
 ```
+
+The [installation page](https://springer-cli.tamnd.com/getting-started/installation/) has the cosign command if you want to verify before running.
 
 ## Usage
 
@@ -292,7 +294,11 @@ spr verify --live     # the fourteen ledger pages, read again off the site
 
 ## Status
 
-Building towards [v0.1.0](https://github.com/tamnd/springer-cli/issues/2). The client, its classifier, the identifiers, the work record, the container records, the subpages, search, the sitemaps, the open indexes and the graph are in; the docs, the captures and the release follow.
+[v0.2.0](https://github.com/tamnd/springer-cli/releases/tag/v0.2.0) is out, and is the first release of `spr`. The client and its classifier, the identifiers, the work and container records, the subpages, search, the sitemaps, the open indexes, the graph, the capture ledger and the docs are all in it.
+
+v0.1.0 on this repository is something else: a binary called `springer`, a Crossref member 297 client, superseded entirely by the rewrite above and left published so its download urls keep working. If you have it installed, remove it rather than leaving both names on your `PATH`.
+
+Nothing here promises a stable surface yet. The exit codes, the json shape and the envelope keys are what this tool is for and they are not going to move casually, but v1.0.0 is worth saying after the weekly drift job has reported nothing for a few weeks, not before.
 
 ## License
 
