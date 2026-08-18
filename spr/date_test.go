@@ -14,7 +14,10 @@ func TestParseDate(t *testing.T) {
 	}{
 		// Every form below was measured on a page this tool reads.
 		{"2021-03-08T00:00:00Z", "2021-03-08", PrecisionDay, false}, // prism.publicationDate
-		{"2021-03-08", "2021-03-08", PrecisionDay, false},           // citation_online_date
+		{"2021-03-08", "2021-03-08", PrecisionDay, false},           // an rss pubDate
+		{"2021/03/08", "2021-03-08", PrecisionDay, false},           // citation_online_date, slashes
+		{"2021/03/01", "2021-03-01", PrecisionDay, false},           // citation_cover_date
+		{"2021/03", "2021-03", PrecisionMonth, false},               // citation_publication_date, no day
 		{"25 November 2024", "2024-11-25", PrecisionDay, false},     // the article header
 		{"05 November 2024", "2024-11-05", PrecisionDay, false},
 		{"March 2021", "2021-03", PrecisionMonth, false}, // a chapter with no day

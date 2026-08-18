@@ -41,6 +41,43 @@ spr get -o json "$url" || case $? in
 esac
 ```
 
+## Every record carries an envelope
+
+A record is not just fields. `spr work -o json` puts an `envelope` next to them:
+
+```json
+{
+  "doi": "10.1007/s10994-021-05946-3",
+  "title": "Aleatoric and epistemic uncertainty in machine learning: an introduction to concepts and methods",
+  "envelope": {
+    "tier": "html",
+    "urls": ["https://link.springer.com/article/10.1007/s10994-021-05946-3"],
+    "fetched": "2026-08-18T10:12:04Z",
+    "status": "ok",
+    "redirects": 3,
+    "bytes": 718572,
+    "via": {
+      "authors": "linkdata:author[]",
+      "references": "highwire:citation_reference",
+      "sections": "region:section[data-title]"
+    },
+    "unread": ["MPU1-ad", "access-count", "altmetric-score"]
+  }
+}
+```
+
+There is no `missed` key on that record because nothing was missed, which is the same rule the fields follow.
+
+| Field | What it is for |
+|---|---|
+| `tier` | which surface produced the record: `html` today, and the api and the open indexes later |
+| `urls` | the requested urls, never the effective ones, because the effective url carries a per request uuid and is not an identifier |
+| `via` | which rung and which exact tag or region answered each field |
+| `missed` | every field that was looked for and did not arrive, each with the reason |
+| `unread` | every region on the page nobody read, so the record never looks more complete than it is |
+
+Absent means absent. A field the page did not carry is left out of the json rather than emitted as `null`, so `.abstract == null` and no `abstract` key are the same answer, and a field in `missed` is the third case: it should have been there and something stopped it.
+
 ## Seeing what it did
 
 `--debug` puts one line per request on stderr, which stays out of the pipe:

@@ -34,6 +34,42 @@ Every response is therefore sorted into one of five states on its content, befor
 | `wrong_kind` | the url answered with something other than what was asked for | 3 |
 | `not_found` | there is no such page, however large the error page is | 3 |
 
+## Where every field came from
+
+Reading a work is four rungs, tried in order, and the first one that answers wins:
+
+| rung | source | why it sits there |
+| --- | --- | --- |
+| 1 | Highwire, Dublin Core and PRISM meta tags | Google Scholar reads them, so a publisher who breaks them hears about it within days |
+| 2 | the schema.org JSON-LD block | typed and nested, and nobody outside the publisher checks it |
+| 3 | Springer's own `data-test` and `data-title` regions | the site's own names for its own components |
+| 4 | css class names | presentational, and one redesign from meaning something else |
+
+Authors are the one deliberate exception and come from rung 2. Highwire emits three parallel arrays for name, institution and email and lines them up by position, which breaks the moment one author has two affiliations, and breaks silently. JSON-LD binds the three to the right person.
+
+`spr extraction` prints the whole table, one row per field, with the reason each row sits where it does. Every record then carries an envelope saying which rung actually answered:
+
+```console
+$ spr work 10.1007/s10994-021-05946-3 --envelope
+doi           10.1007/s10994-021-05946-3
+type          article
+title         Aleatoric and epistemic uncertainty in machine learning: an introduction to concepts and methods
+published in  Machine Learning 110(3) pp 457-506
+access        free to read, access=Yes, world readable declared and empty
+...
+envelope     html, ok, 718572 bytes, 3 redirects, fetched 2026-08-18 10:12:04 UTC
+             40 fields answered, 0 missed, 50 regions unread
+
+via
+  authors                linkdata:author[]
+  access.world_readable  highwire:citation_fulltext_world_readable (present, empty)
+  references             highwire:citation_reference
+  ref_links              selector:.c-article-references__links a
+  sections               region:section[data-title]
+```
+
+Absent means absent. A field the page did not carry is left out rather than emitted as null, a field that was looked for and did not arrive is named in `missed` with the reason, and the regions nobody read are listed rather than quietly dropped, so a record never looks more complete than it is.
+
 ## Install
 
 ```bash
@@ -49,6 +85,12 @@ docker run --rm ghcr.io/tamnd/spr:latest --help
 ## Usage
 
 ```bash
+spr work 10.1007/s10994-021-05946-3             # one article, chapter, protocol or entry
+spr work --envelope /chapter/10.1007/978-3-030-58607-2_1
+spr work -o json 10.1007/s10994-021-05946-3 | jq .references
+spr extraction                                  # the field table: rung, source, reason
+spr extraction authors
+spr extraction --rung selector
 spr get /article/10.1007/s10994-021-05946-3     # fetch and classify one url
 spr get --body /journal/10994 > journal.html    # the raw page
 spr get -o json '/search.rss?query=uncertainty' # the same, as json
@@ -56,6 +98,8 @@ spr cache                                       # what is cached and how much
 spr cache --clear
 spr version
 ```
+
+A DOI is enough for `spr work`. The registrant prefix says who issued it and nothing about what it is, so the suffix orders the paths it could live under and they are tried until one answers.
 
 Every command shares these:
 
@@ -87,7 +131,7 @@ Every command shares these:
 ```
 cmd/spr/      thin main, wires cli.Root into fang
 cli/          the cobra command tree
-spr/          the library: client, pacer, cache, classifier
+spr/          the library: client, pacer, cache, classifier, the extraction ladder
 docs/         the tago documentation site
 scripts/      drift.sh, the weekly live probe
 ```
@@ -101,7 +145,7 @@ make fmt
 
 ## Status
 
-Building towards [v0.1.0](https://github.com/tamnd/springer-cli/issues/2). The client and its classifier are in; identity, records, subpages, search, sitemaps, the open indexes and the graph follow.
+Building towards [v0.1.0](https://github.com/tamnd/springer-cli/issues/2). The client, its classifier, the identifiers and the work record are in; container records, subpages, search, sitemaps, the open indexes and the graph follow.
 
 ## License
 

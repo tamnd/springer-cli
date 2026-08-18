@@ -12,7 +12,8 @@ import (
 // Measured across the captures:
 //
 //	2021-03-08T00:00:00Z   prism.publicationDate on an article
-//	2021-03-08             citation_online_date
+//	2021/03/08             citation_online_date, slashes, on the same page
+//	2021/03                citation_publication_date, slashes and no day
 //	25 November 2024       the printed date in the article header region
 //	March 2021             a book chapter with no day
 //	2022                   a book, and most series
@@ -120,7 +121,9 @@ var dateFormats = []struct {
 }{
 	{time.RFC3339, PrecisionDay},          // 2021-03-08T00:00:00Z, prism.publicationDate
 	{"2006-01-02T15:04:05", PrecisionDay}, // the same without a zone, seen in JSON-LD
-	{"2006-01-02", PrecisionDay},          // citation_online_date, and an rss pubDate
+	{"2006-01-02", PrecisionDay},          // an rss pubDate
+	{"2006/01/02", PrecisionDay},          // citation_online_date and citation_cover_date
+	{"2006/01", PrecisionMonth},           // citation_publication_date on a monthly issue
 	{"2 January 2006", PrecisionDay},      // the printed date in an article header
 	{"02 January 2006", PrecisionDay},     // the same, zero padded
 	{"January 2, 2006", PrecisionDay},     // the American form, seen in JSON-LD

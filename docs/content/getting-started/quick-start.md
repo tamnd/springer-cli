@@ -42,6 +42,24 @@ content type text/html; charset=utf-8
 
 Seven hops, a 200, and no pdf. The url ran the cookie dance, got sent across to the chapter page, and ran it again. Telling you `ok` here would be the tool lying to you.
 
+## Read one work
+
+`spr work` is the first command that parses anything. A DOI is enough, and the four work types share one record.
+
+```console
+$ spr work 10.1007/s10994-021-05946-3
+doi           10.1007/s10994-021-05946-3
+type          article
+title         Aleatoric and epistemic uncertainty in machine learning: an introduction to concepts and methods
+published in  Machine Learning 110(3) pp 457-506
+access        free to read, access=Yes, world readable declared and empty
+...
+envelope      html, ok, 718572 bytes, 3 redirects, fetched 2026-08-18 10:12:04 UTC
+              40 fields answered, 0 missed, 50 regions unread
+```
+
+Add `--envelope` to see which rung answered each field, and run `spr extraction` for the table of which rung is expected to answer what, and why. There is a longer walkthrough in [reading one work](/guides/reading-one-work/).
+
 ## Take the raw page, or json
 
 ```bash
