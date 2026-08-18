@@ -2,7 +2,7 @@
 
 A delightful command line for [link.springer.com](https://link.springer.com): works, journals, books, series, references, metrics, and the graph between them.
 
-`spr` is a single pure Go binary. It reads what Springer Nature Link publishes, classifies every response before parsing a byte of it, and records where each field came from. No API key, nothing to run alongside it.
+`spr` is a single pure Go binary. It reads what Springer Nature Link publishes, classifies every response before parsing a byte of it, and records where each field came from. Nothing to run alongside it, and no API key for anything on the site itself.
 
 ## Why classification comes first
 
@@ -119,6 +119,21 @@ They disagree because the HTML honours `sortBy` and the feed ignores it and alwa
 
 Four of the facet parameters have to arrive quoted, `taxonomy="Machine Learning"` and three others. Unquoted is a valid request that answers 200 and matches nothing, which is the worst failure a search can have because it is indistinguishable from a query with no results. The quotes are added in one shared place and a test reads the requirement off a captured page.
 
+## The site has no page for who cites a work
+
+A work page lists what a work cites. Nothing on link.springer.com lists what cites it, and the metrics page states a total attributed to Dimensions without naming a single citing work. So `spr cited-by` asks OpenAlex, which publishes the edges themselves, and `spr crossref --references` gets the other direction as identifiers rather than as rendered text:
+
+```console
+$ spr crossref 10.1007/s10994-021-05946-3 --references | spr work
+crossref: 66 of 122 deposited references carry a doi, and 56 do not
+```
+
+Fifty six of those 122 entries carry no DOI at all. They are unresolvable rather than missing, and a graph built from this list should say so rather than quietly having 66 edges where the paper has 122 references.
+
+Three hosts, four numbers, one work. Springer's metrics page says 1,906 citations, Crossref says 1,553 deposited, OpenAlex stores 1,563 and its live listing counted 1,554 in the same minute. Every one of them prints under a name that says who counted and, for the stored aggregate, the date it was stored on. No command here prints a merged count: averaging them would invent a number no host published and picking one would hide the two that disagree.
+
+`spr search --also crossref --also openalex` asks the indexes the same question the site was asked and merges the answers on the normalized DOI, which is the only key the three sources agree on. 557 results from Springer against 213,566 matches at Crossref is a fact about the query that neither set shows on its own, so the backend totals go to stderr where they cannot be mistaken for a count of what came back.
+
 ## Install
 
 ```bash
@@ -154,6 +169,14 @@ spr sitemap                                     # the shape of the whole site, o
 spr sitemap --static journals                   # every journal there is, three requests
 spr sitemap --kind article --since 2026-08-01   # urls, one per line, ready to pipe
 spr sitemap --all --yes --resume > urls.txt     # 10,408 shards, resumable
+spr crossref 10.1007/s10994-021-05946-3         # what the publisher deposited
+spr crossref 10.1007/s10994-021-05946-3 --references
+spr crossref --issn 0885-6125 --from 2024 --rows 100
+spr openalex 10.1007/s10994-021-05946-3         # the open index, both directions
+spr cited-by 10.1007/s10994-021-05946-3         # who cites it, which the site never says
+spr cited-by 10.1007/s10994-021-05946-3 --by-year
+spr search "uncertainty" --also crossref --also openalex
+spr api --doi 10.1007/s10994-021-05946-3        # the publisher's own api, with a key
 spr extraction                                  # the field table: rung, source, reason
 spr extraction authors
 spr extraction journal.title
@@ -213,7 +236,7 @@ make fmt
 
 ## Status
 
-Building towards [v0.1.0](https://github.com/tamnd/springer-cli/issues/2). The client, its classifier, the identifiers, the work record, the container records, the subpages and search are in; sitemaps, the open indexes and the graph follow.
+Building towards [v0.1.0](https://github.com/tamnd/springer-cli/issues/2). The client, its classifier, the identifiers, the work record, the container records, the subpages, search, the sitemaps and the open indexes are in; the graph follows.
 
 ## License
 

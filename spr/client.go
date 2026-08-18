@@ -99,18 +99,40 @@ type Client struct {
 	// clock is, because it is a seam for tests and not a feature.
 	base string
 
-	// rate holds the last rate limit budget seen per host, read from the
-	// response rather than compiled in from a documentation page.
+	// rate holds the last rate limit budget seen per host, and pool the pool
+	// each host last named. Both are read from the response rather than
+	// compiled in from a documentation page, and both are under rateMu.
 	rateMu sync.Mutex
 	rate   map[string]RateLimit
+	pool   map[string]Pool
 }
 
 // RateLimit is what a host last said about the budget it is enforcing.
+//
+// Every field here is optional because no two hosts measured state the same
+// subset. Crossref sends a limit and an interval and no remaining and no reset.
+// OpenAlex sends a limit, a remaining and a reset, and then sends the whole
+// budget again in dollars, which on that host is the one that runs out first.
 type RateLimit struct {
 	Limit     int
 	Remaining int
-	Reset     time.Time
-	Seen      time.Time
+
+	// Interval is the window the limit applies to, when the host names one.
+	// Crossref says "10 per 1s" across two headers and OpenAlex says 1,000 per
+	// a reset eleven hours out, so the same struct has to hold a rate and a
+	// quota without pretending they are the same shape.
+	Interval time.Duration
+
+	Reset time.Time
+	Seen  time.Time
+
+	// RemainingUSD and LimitUSD are OpenAlex's metered budget. It is carried
+	// because it binds before the request count does: the same response that
+	// said 991 of 1,000 requests remained said $0.0991 of $0.10 remained, and a
+	// single search page costs ten times what a filter page costs.
+	LimitUSD     float64
+	RemainingUSD float64
+	HasUSD       bool
 }
 
 // Option configures a Client.
@@ -166,6 +188,7 @@ func New(opts ...Option) *Client {
 		Pacer:   NewPacer(DefaultPace),
 		Retries: 2,
 		rate:    make(map[string]RateLimit),
+		pool:    make(map[string]Pool),
 	}
 	// The chain is followed by hand rather than by the http package, so the
 	// number of hops is observable and the requested url stays the identity.
@@ -185,9 +208,16 @@ func (c *Client) Get(ctx context.Context, raw string, want Kind) (*Response, err
 	if err != nil {
 		return nil, err
 	}
-	if r, ok := c.Cache.Get(target); ok {
+	// stored is the url everything downstream of the request sees: the cache
+	// key, the debug line, the error text and the Response.URL that ends up in
+	// an envelope. It is target with any api_key blanked, because a credential
+	// is not part of the identity of a resource and there must be no path from
+	// a configured key to a file on disk or a line on a terminal.
+	stored := stripAPIKey(target)
+
+	if r, ok := c.Cache.Get(stored); ok {
 		r.Status = Classify(r.Code, r.Header, r.Body, want)
-		c.debugf("cache %s %s", r.Status, target)
+		c.debugf("cache %s %s", r.Status, stored)
 		return r, nil
 	}
 
@@ -196,15 +226,15 @@ func (c *Client) Get(ctx context.Context, raw string, want Kind) (*Response, err
 		if err := c.Pacer.Wait(ctx, target); err != nil {
 			return nil, err
 		}
-		r, err := c.fetch(ctx, target)
+		r, err := c.fetch(ctx, target, stored)
 		switch {
 		case err != nil:
 			last = err
 		case r.Code >= 500:
-			last = fmt.Errorf("%s: upstream returned %d", target, r.Code)
+			last = fmt.Errorf("%s: upstream returned %d", stored, r.Code)
 		default:
 			r.Status = Classify(r.Code, r.Header, r.Body, want)
-			c.debugf("%d %s %d bytes %d redirects %s", r.Code, r.Status, len(r.Body), r.Redirects, target)
+			c.debugf("%d %s %d bytes %d redirects %s", r.Code, r.Status, len(r.Body), r.Redirects, stored)
 			// A challenge is stored so that a repeat run does not go and ask
 			// for another one, and everything else is stored because it is the
 			// page. A 404 is cached too: a work that does not exist still does
@@ -228,7 +258,10 @@ func (c *Client) Get(ctx context.Context, raw string, want Kind) (*Response, err
 }
 
 // fetch performs one request and follows the redirect chain by hand.
-func (c *Client) fetch(ctx context.Context, target string) (*Response, error) {
+//
+// target is the url that goes on the wire and stored is the url that goes into
+// the response, which differ only when the request carries a credential.
+func (c *Client) fetch(ctx context.Context, target, stored string) (*Response, error) {
 	current := target
 	redirects := 0
 	for {
@@ -243,17 +276,18 @@ func (c *Client) fetch(ctx context.Context, target string) (*Response, error) {
 			return nil, err
 		}
 		c.readRateLimit(req.URL.Host, resp.Header)
+		c.readPool(req.URL.Host, resp.Header)
 
 		if loc := resp.Header.Get("Location"); isRedirect(resp.StatusCode) && loc != "" {
 			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 			resp.Body.Close()
 			redirects++
 			if redirects > maxRedirects {
-				return nil, fmt.Errorf("%s: more than %d redirects, which is longer than the seven hop worst case this site is known to use", target, maxRedirects)
+				return nil, fmt.Errorf("%s: more than %d redirects, which is longer than the seven hop worst case this site is known to use", stored, maxRedirects)
 			}
 			next, err := req.URL.Parse(loc)
 			if err != nil {
-				return nil, fmt.Errorf("%s: redirect to an unparseable location %q: %w", target, loc, err)
+				return nil, fmt.Errorf("%s: redirect to an unparseable location %q: %w", stored, loc, err)
 			}
 			current = next.String()
 			continue
@@ -262,11 +296,13 @@ func (c *Client) fetch(ctx context.Context, target string) (*Response, error) {
 		body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 		resp.Body.Close()
 		if err != nil {
-			return nil, fmt.Errorf("%s: reading the body: %w", target, err)
+			return nil, fmt.Errorf("%s: reading the body: %w", stored, err)
 		}
 		return &Response{
-			URL:       target,
-			Final:     current,
+			URL: stored,
+			// Final is stripped too. A redirect that carries the query string
+			// through carries the key with it, and Final is printed by --debug.
+			Final:     stripAPIKey(current),
 			Code:      resp.StatusCode,
 			Header:    resp.Header,
 			Body:      body,
@@ -294,23 +330,54 @@ func (c *Client) setHeaders(req *http.Request) {
 }
 
 // readRateLimit records what the host says about the budget it is enforcing.
+//
 // No limit is compiled in: the Springer Nature API's published figure could not
 // be verified without a key, and a number read from a docs page is correct
-// until the day it is not.
+// until the day it is not. Both spellings of the header are read, because the
+// two hosts that send one disagree about a hyphen and http.Header canonicalizes
+// case without moving dashes, so X-RateLimit-Limit and X-Rate-Limit-Limit are
+// two different keys and both have to be asked for by name.
 func (c *Client) readRateLimit(host string, h http.Header) {
-	limit, hasLimit := headerInt(h, "X-RateLimit-Limit")
-	remaining, hasRemaining := headerInt(h, "X-RateLimit-Remaining")
+	limit, hasLimit := headerIntAny(h, "X-RateLimit-Limit", "X-Rate-Limit-Limit")
+	remaining, hasRemaining := headerIntAny(h, "X-RateLimit-Remaining", "X-Rate-Limit-Remaining")
 	if !hasLimit && !hasRemaining {
 		return
 	}
-	rl := RateLimit{Limit: limit, Remaining: remaining, Seen: time.Now()}
-	if reset, ok := headerInt(h, "X-RateLimit-Reset"); ok {
-		rl.Reset = time.Unix(int64(reset), 0)
+	now := time.Now()
+	rl := RateLimit{Limit: limit, Remaining: remaining, Seen: now}
+	if v, ok := headerAny(h, "X-RateLimit-Interval", "X-Rate-Limit-Interval"); ok {
+		if d, err := time.ParseDuration(strings.TrimSpace(v)); err == nil {
+			rl.Interval = d
+		}
+	}
+	if reset, ok := headerIntAny(h, "X-RateLimit-Reset", "X-Rate-Limit-Reset"); ok {
+		rl.Reset = resetTime(reset, now)
+	}
+	if lu, ok := headerFloatAny(h, "X-RateLimit-Limit-USD"); ok {
+		rl.LimitUSD, rl.HasUSD = lu, true
+	}
+	if ru, ok := headerFloatAny(h, "X-RateLimit-Remaining-USD"); ok {
+		rl.RemainingUSD, rl.HasUSD = ru, true
 	}
 	c.rateMu.Lock()
 	c.rate[strings.ToLower(host)] = rl
 	c.rateMu.Unlock()
-	c.debugf("rate %s %d/%d", host, remaining, limit)
+	c.debugf("rate %s %s", host, rl)
+}
+
+// String is the one line --debug prints, which says only what the host said.
+func (r RateLimit) String() string {
+	b := fmt.Sprintf("%d of %d", r.Remaining, r.Limit)
+	switch {
+	case r.Interval > 0:
+		b += " per " + r.Interval.String()
+	case !r.Reset.IsZero():
+		b += fmt.Sprintf(", resets in %s", time.Until(r.Reset).Round(time.Minute))
+	}
+	if r.HasUSD {
+		b += fmt.Sprintf(", $%.4f of $%.2f", r.RemainingUSD, r.LimitUSD)
+	}
+	return b
 }
 
 // RateLimit reports the last budget a host stated, and whether it stated one.
@@ -354,18 +421,6 @@ func RetryAfter(h http.Header) (time.Duration, bool) {
 		return 0, true
 	}
 	return 0, false
-}
-
-func headerInt(h http.Header, name string) (int, bool) {
-	v := h.Get(name)
-	if v == "" {
-		return 0, false
-	}
-	n, err := strconv.Atoi(strings.TrimSpace(v))
-	if err != nil {
-		return 0, false
-	}
-	return n, true
 }
 
 func isRedirect(code int) bool {

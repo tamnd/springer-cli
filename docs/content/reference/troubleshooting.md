@@ -44,6 +44,24 @@ The public surface is not the whole site. Check the spelling the site itself use
 
 For a search specifically, check the spelling of the facet value against `spr search "<terms>" --facets`, which prints the site's own labels and counts for one request. The four faceted parameters have to reach the site wrapped in double quotes and spr adds them for you, so a taxonomy or discipline that matches nothing is a value the site does not use rather than a value that arrived malformed. A query that matched nothing exits 3 and prints nothing, which is not the same as a run that failed.
 
+## `spr api` says there is no key
+
+Set `SPRINGER_API_KEY`, or put `api_key=...` in `~/.config/spr/config`. `spr version` says which of the two answered without printing the key itself.
+
+That check happens before the request, because a missing key and a wrong key both answer 401 with an identical body and spending a request to be told something indistinguishable helps nobody. If the key is set and the run still 401s, the key is wrong or expired.
+
+## Two hosts disagree about how many citations a work has
+
+They are counting different corpora, and none of them is wrong. For DOI `10.1007/s10994-021-05946-3`, Springer's metrics page says 1,906 attributed to Dimensions, Crossref says 1,553 deposited, OpenAlex stores 1,563 and its live listing counted 1,554 in the same minute.
+
+Every count in this tool prints under a name that says who counted, and the OpenAlex stored aggregate prints with the date it was stored on, which is what makes it differing from the live listing explicable rather than alarming. There is no command that merges them, deliberately. See [the open indexes](/guides/open-indexes/).
+
+## `--also` returned fewer new results than expected
+
+The join is on the normalized DOI and on nothing else. A backend result with no DOI joins to nothing and is counted separately in the note on stderr, and `--type` is not sent to the backends at all because Springer's content types have no measured mapping onto the Crossref or OpenAlex vocabularies.
+
+If a backend is missing from the output entirely, it failed and said so on stderr. That is not a failed run, because two hosts answering is still worth having.
+
 ## The binary is not on your PATH
 
 `go install` puts the binary in `$(go env GOPATH)/bin`, usually `~/go/bin`, and a release archive leaves it wherever you unpacked it. See [installation](/getting-started/installation/).

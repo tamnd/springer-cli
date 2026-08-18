@@ -25,6 +25,14 @@ const (
 	// KindXML is a sitemap or an rss feed. Springer serves both as
 	// application/xml, and serves one sitemap as text/plain.
 	KindXML
+
+	// KindJSON is an open index answer. It is a separate kind and not a
+	// relaxation of KindAny because the two 404s measured are not JSON:
+	// Crossref answers "Resource not found." as text/plain and OpenAlex answers
+	// an HTML error page. Both are honest 404s, so the status code catches them
+	// first, but a host that starts serving an HTML holding page with a 200 is
+	// exactly the case this kind is here to name.
+	KindJSON
 )
 
 // pdfMagic is the file signature every pdf starts with. The content type is
@@ -51,6 +59,11 @@ func (k Kind) Matches(contentType string, body []byte) bool {
 		// directory of xml siblings, so text/plain counts here. The parser
 		// sniffs the first bytes rather than trusting either one.
 		return strings.Contains(ct, "xml") || strings.Contains(ct, "text/plain") || ct == ""
+	case KindJSON:
+		// Crossref answers application/json and OpenAlex answers
+		// application/json too, but the JSON:API and problem+json spellings
+		// exist and a suffix match costs nothing.
+		return strings.Contains(ct, "json") || ct == ""
 	}
 	return false
 }
@@ -64,6 +77,8 @@ func (k Kind) String() string {
 		return "pdf"
 	case KindXML:
 		return "xml"
+	case KindJSON:
+		return "json"
 	default:
 		return "any"
 	}

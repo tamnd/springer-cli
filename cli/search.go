@@ -55,6 +55,10 @@ func searchCmd() *cobra.Command {
 			"in double quotes. Sending them bare is a valid request that answers 200 and matches\n" +
 			"nothing, so the quotes are added for you and --taxonomy \"Machine Learning\" is what you\n" +
 			"type.\n\n" +
+			"--also crossref and --also openalex ask an open index the same question and merge what\n" +
+			"comes back on the normalized doi. Those indexes are not restricted to this publisher, so\n" +
+			"what they add is a measure of what a Springer search does not cover, and each backend's\n" +
+			"own count goes to stderr where it cannot be mistaken for part of the result set.\n\n" +
 			"A query that matched nothing exits 3, so that no results and a failed run are two\n" +
 			"different things to a script without either of them being parsed out of the output.",
 		Args: cobra.MaximumNArgs(1),
@@ -64,6 +68,7 @@ func searchCmd() *cobra.Command {
 			"  spr search \"graph neural network\" --taxonomy \"Machine Learning\" --sort date --limit 500\n" +
 			"  spr search --title \"uncertainty\" --contributor \"Hüllermeier\"\n" +
 			"  spr search \"climate\" --sdg \"Climate action\" --facets\n" +
+			"  spr search \"aleatoric uncertainty\" --also crossref --also openalex\n" +
 			"  spr search \"uncertainty\" --limit 500 --dry-run\n" +
 			"  spr search -o json \"uncertainty\" | jq -r '.results[] | \"\\(.doi)\\t\\(.title)\"'",
 	}
@@ -77,6 +82,7 @@ func searchCmd() *cobra.Command {
 		abstract bool
 		dryRun   bool
 		envelope bool
+		also     []string
 	)
 
 	f := cmd.Flags()
@@ -101,6 +107,7 @@ func searchCmd() *cobra.Command {
 	f.BoolVar(&facets, "facets", false, "print the facet groups and counts instead of the results, one request")
 	f.BoolVar(&abstract, "abstract", false, "print each result's abstract, which the feed carries in full")
 	f.BoolVar(&dryRun, "dry-run", false, "print what this query would cost and make no requests")
+	f.StringArrayVar(&also, "also", nil, "widen the search with an open index, repeatable: "+strings.Join(spr.AlsoNames, ", "))
 	f.BoolVar(&envelope, "envelope", false, "print the whole envelope: every field, its source, what was missed and what was left unread")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -128,30 +135,39 @@ func searchCmd() *cobra.Command {
 		if q.Page < 1 {
 			return exit(CodeUsage, fmt.Errorf("--page %d is before the first page", q.Page))
 		}
+		backends, err := parseAlso(also)
+		if err != nil {
+			return err
+		}
+		if len(backends) > 0 && facets {
+			return exit(CodeUsage, errors.New("--facets counts the Springer result set and the open indexes count their own, so --also has nothing to add to it"))
+		}
 
 		out := cmd.OutOrStdout()
 		errw := cmd.ErrOrStderr()
 
 		rss, html := q.Requests(limit, enrich, facets)
 		if dryRun {
-			printBill(out, q, rss, html, facets)
+			printBill(out, q, rss, html, facets, backends)
 			return nil
 		}
 		if rss+html > billAt {
-			printBill(errw, q, rss, html, facets)
+			printBill(errw, q, rss, html, facets, backends)
 		}
 
 		c := client(errw)
+		note := func(s string) { fmt.Fprintln(errw, "search: "+s) }
 		res, err := c.Search(cmd.Context(), q, spr.SearchOptions{
 			Limit:      limit,
 			Path:       path,
 			Enrich:     enrich,
 			FacetsOnly: facets,
-			Note:       func(s string) { fmt.Fprintln(errw, "search: "+s) },
+			Note:       note,
 		})
 		if err != nil {
 			return searchError(errw, err)
 		}
+		c.Widen(cmd.Context(), res, backends, limit, note)
 
 		if g.format == "json" {
 			if err := encode(out, res); err != nil {
@@ -204,6 +220,26 @@ func checkWindow(s string) error {
 	return exit(CodeUsage, fmt.Errorf("--last %q is not one of %s", s, strings.Join(windows, ", ")))
 }
 
+// parseAlso reads the --also list and refuses a backend twice, because asking
+// Crossref the same question twice costs two requests and merges the second
+// answer into the first for no result.
+func parseAlso(names []string) ([]spr.Also, error) {
+	var out []spr.Also
+	seen := map[spr.Also]bool{}
+	for _, n := range names {
+		b, err := spr.ParseAlso(n)
+		if err != nil {
+			return nil, exit(CodeUsage, err)
+		}
+		if seen[b] {
+			return nil, exit(CodeUsage, fmt.Errorf("--also %s is given twice", b))
+		}
+		seen[b] = true
+		out = append(out, b)
+	}
+	return out, nil
+}
+
 func checkPath(s string) error {
 	switch s {
 	case "", spr.PathRSS, spr.PathHTML:
@@ -249,7 +285,7 @@ func searchExit(res *spr.SearchResponse, facets bool) error {
 // a five second bucket of its own, and both paths share it, so 26 requests is
 // over two minutes of wall clock and a person deserves to know that before it
 // starts rather than after.
-func printBill(out io.Writer, q spr.Query, rss, html int, facets bool) {
+func printBill(out io.Writer, q spr.Query, rss, html int, facets bool, backends []spr.Also) {
 	line := field(out)
 	line("query", queryLine(q))
 	switch {
@@ -272,9 +308,28 @@ func printBill(out io.Writer, q spr.Query, rss, html int, facets bool) {
 		}
 		parts = append(parts, fmt.Sprintf("%d html %s %s", html, plural(html, "page"), what))
 	}
+	for _, b := range backends {
+		parts = append(parts, fmt.Sprintf("1 %s page", b))
+	}
 	line("requests", strings.Join(parts, " + "))
 	line("pace", fmt.Sprintf("1 request / %s, which both search paths share", spr.SearchPace))
+
+	// The backends are not in the estimate. They are separate hosts with their
+	// own pace buckets, so their one request each runs alongside the Springer
+	// pages rather than behind them, and adding their time to this number would
+	// bill for a wait that does not happen.
 	line("estimate", estimate(time.Duration(rss+html-1)*spr.SearchPace))
+	if len(backends) > 0 {
+		line("also", fmt.Sprintf("%s, on their own hosts and their own pace, merged on doi", joinAlso(backends)))
+	}
+}
+
+func joinAlso(backends []spr.Also) string {
+	out := make([]string, 0, len(backends))
+	for _, b := range backends {
+		out = append(out, string(b))
+	}
+	return strings.Join(out, " and ")
 }
 
 // queryLine writes the query back in one line, the way a person would say it,

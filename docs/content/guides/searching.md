@@ -120,6 +120,21 @@ estimate      2 minutes
 
 Any run over five requests prints that same bill on stderr and then gets on with it. It is not a prompt.
 
+## Widening past what this publisher published
+
+A search of link.springer.com returns what Springer publishes, which is the right answer to the question and not always the question somebody has. `--also` asks an open index the same thing and merges the answer in:
+
+```console
+$ spr search "aleatoric uncertainty" --also crossref --also openalex
+search: crossref matched 213566 and returned 20, 4 already in the Springer results and 16 new
+search: openalex matched 21402 and returned 25, 6 already in the Springer results and 19 new
+557 results
+```
+
+557 against 213,566 is the fact neither result set shows on its own. The join is on the normalized DOI and on nothing else, because titles vary in punctuation and case across the three sources and positions are meaningless across corpora sorted differently. Every result says which backends answered for it, so one all three returned reads `rss+html+crossref+openalex`.
+
+The backend totals go to stderr and into `notes`, never into the result set, and a backend that fails is reported and skipped rather than failing a run the other two answered. `--also` adds a request to the bill and nothing to the estimate, because the indexes are separate hosts with their own pace buckets. See [the open indexes](/guides/open-indexes/) for what each host holds.
+
 ## When the HTML is challenged
 
 The search completes. The results are the feed's, they are correct, and what is missing is the total, the facets and the card fields:

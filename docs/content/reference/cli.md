@@ -24,6 +24,10 @@ Run `spr <command> --help` for the full flag list on any command, and see [confi
 | `figures` | List a work's figures, or read one at full size |
 | `tables` | List a work's tables, or read one in full |
 | `sitemap` | Enumerate what the site publishes, from its own sitemaps |
+| `crossref` | Read a work, its deposited reference list or a query from Crossref |
+| `openalex` | Read a work or a query from OpenAlex |
+| `cited-by` | List the works that cite this one, which this site has no page for |
+| `api` | Query the Springer Nature API, which needs a key |
 | `extraction` | Print the extraction table: every field, the rung that answers it, and why |
 | `cache` | Show or clear the page cache |
 | `version` | Print the version, commit and build date |
@@ -82,6 +86,7 @@ The two paths do not agree on what the first twenty results are. Fetched for the
 | `--enrich` | Fetch the HTML card fields for every result rather than the first page |
 | `--facets` | Print the facet groups and counts instead of the results, one request |
 | `--abstract` | Print each result's abstract, which the feed carries in full |
+| `--also` | Widen the search with an open index, repeatable: `crossref`, `openalex` |
 | `--dry-run` | Print what this query would cost and make no requests |
 | `--envelope` | Print the whole envelope: every field, its source, what was missed and what was left unread |
 
@@ -92,6 +97,7 @@ spr search "uncertainty" --journal "Machine Learning" --open-access
 spr search "graph neural network" --taxonomy "Machine Learning" --sort date --limit 500
 spr search --title "uncertainty" --contributor "Hüllermeier"
 spr search "climate" --sdg "Climate action" --facets
+spr search "aleatoric uncertainty" --also crossref --also openalex
 spr search "uncertainty" --limit 500 --dry-run
 ```
 
@@ -114,6 +120,22 @@ taxonomy                      Machine learning 168, Artificial intelligence
                               75, Statistical learning 67, ...
 ```
 
+`--also` asks an open index the same question and merges its answer into the result set. A search of link.springer.com returns what Springer publishes, and the difference between that and what everybody publishes is a fact about the query that neither set shows on its own:
+
+```
+$ spr search "aleatoric uncertainty" --also crossref --also openalex
+search: crossref matched 213566 and returned 20, 4 already in the Springer results and 16 new
+search: openalex matched 21402 and returned 25, 6 already in the Springer results and 19 new
+557 results
+...
+```
+
+The counts each backend reported go to stderr, and into `notes` in the JSON, where they cannot be mistaken for part of the result set. The join is on the normalized DOI and on nothing else, because titles vary in punctuation and case between the three sources and positions are meaningless across corpora that were sorted differently. A result with no DOI joins to nothing and stays where it is. Every result says which backends answered for it, so one the site and both indexes returned reads `rss+html+crossref+openalex`.
+
+A backend fills only one field, the abstract, and only when the site left it empty, and the envelope records that it did. Overwriting the publisher's own statement with a derived index's version of it would make the record harder to trust rather than fuller.
+
+`--type` is not sent to the backends. Springer's content types are its own words, Crossref and OpenAlex each have a different vocabulary for the same distinction, and no mapping between them was measured. The filter is dropped and stderr says so rather than guessing quietly. `--also` with `--facets` is an error, because facets count the Springer result set and the backends count their own.
+
 `--dry-run` bills the query first. Both search paths share one five second pace bucket, so 26 requests is over two minutes of waiting and it is worth knowing that up front:
 
 ```
@@ -126,6 +148,18 @@ estimate      2 minutes
 ```
 
 A run over five requests prints the same bill on stderr and then proceeds. It is not a prompt, because prompting breaks every pipeline this tool is meant to sit in.
+
+`--also` adds a line to the bill and a request to the count, and it does not change the estimate. The backends are separate hosts with their own pace buckets, so their requests do not queue behind the search surface's five second one:
+
+```
+$ spr search "uncertainty" --also crossref --also openalex --dry-run
+query         uncertainty
+path          /search.rss, 20 per page
+requests      1 rss page + 1 html page for facets and the total + 1 crossref page + 1 openalex page
+pace          1 request / 5s, which both search paths share
+estimate      5 seconds
+also          crossref and openalex, on their own hosts and their own pace, merged on doi
+```
 
 When the HTML pass is challenged, the search completes on RSS alone and stderr says so in the same breath rather than leaving a caller to notice that the facets are missing. A query that matched nothing exits 3, so that no results and a failed run are two different things to a script without either being parsed out of the output.
 
@@ -418,6 +452,162 @@ The bill is computed from the index that was just fetched rather than from a fig
 `--resume` writes each shard's url to a state file under the cache directory as that shard finishes, keyed on the selection, so resuming a walk of the last three days never inherits the state of a walk of everything. A shard is marked only after every url in it has been printed, and a shard that did not answer is left unmarked and counted, so a resumed run comes back for it. `--resume` with `--no-cache` is a usage error rather than a run that quietly fails to resume.
 
 See the [enumerating the site](/guides/sitemaps/) guide for what the eight static maps hold and what a walk of everything costs.
+
+## `spr crossref`
+
+```
+spr crossref [doi] [flags]
+```
+
+Reads the DOI registration agency, which holds what the publisher deposited rather than what the site renders. With a DOI it reads one record. With `--query`, `--title`, `--author` or any filter it searches.
+
+Crossref answers what link.springer.com does not: the deposited abstract in full, the funder list with award numbers, every ORCID with whether the person authenticated it, the licence terms, and the reference list as identifiers rather than as rendered text.
+
+| Flag | Meaning |
+|---|---|
+| `--query` | Free text across title, container, author and year |
+| `--title` | Title contains |
+| `--author` | Author name contains |
+| `--issn` | Only this journal, by either of its ISSNs |
+| `--isbn` | Only this book |
+| `--type` | Crossref work type: `journal-article`, `book-chapter`, `proceedings-article` |
+| `--funder` | Funder registry id, with or without the resolver prefix |
+| `--from`, `--to` | Date range, as a year, a year and month, or a date |
+| `--rows` | Results per page, capped by Crossref at 1000 |
+| `--cursor` | Deep paging token, `*` for the first page of one |
+| `--facet` | Count by group instead of listing, repeatable: `type-name:5` |
+| `--sort`, `--order` | `relevance`, `published` or `is-referenced-by-count`, and `asc` or `desc` |
+| `--references` | Print the deposited reference list rather than the record |
+| `--envelope` | Print the whole envelope |
+
+```bash
+spr crossref 10.1007/s10994-021-05946-3
+spr crossref 10.1007/s10994-021-05946-3 --references
+spr crossref --issn 0885-6125 --from 2024 --rows 100
+spr crossref --funder 10.13039/501100001659 --type journal-article
+spr crossref --query uncertainty --facet type-name:5
+spr crossref 10.1007/s10994-021-05946-3 --references | spr crossref
+```
+
+A search with no DOI and nothing that narrows anything is a usage error. Sort, order, rows and the facet list are all flags, and none of them narrows a corpus of 170 million records into a request anybody meant to make.
+
+`--references` prints the reference DOIs one per line on stdout and the count on stderr, so a pipe still gets a clean list of identifiers while a person watching learns that the list is partial:
+
+```console
+$ spr crossref 10.1007/s10994-021-05946-3 --references
+10.1007/978-3-642-40994-3_29
+10.1613/jair.4192
+...
+crossref: 66 of 122 deposited references carry a doi, and 56 do not
+```
+
+The counts print under their own heading and each one names who counted:
+
+```
+counts
+  crossref_citations             1,553, deposited citations only
+  crossref_references            122 deposited
+  crossref_references_with_doi   66 of those resolve to something
+```
+
+That first number is what other Crossref members deposited as citing this work. It is not the site's citation count, it is not OpenAlex's, and no command in this tool prints a merged one. See [counts and assets](/guides/counts-and-assets/) for why three counts of the same thing is the correct answer rather than a problem to fix.
+
+## `spr openalex`
+
+```
+spr openalex [doi or work id] [flags]
+```
+
+Reads the open index that holds both citation directions, an abstract, an institution graph with ROR ids, and a field normalized impact figure. With a DOI or a `W` work id it reads one record. With `--query`, `--title`, `--author`, `--cites` or `--cited-by` it searches.
+
+| Flag | Meaning |
+|---|---|
+| `--query` | Full text search, which OpenAlex scores |
+| `--title` | Title contains |
+| `--author` | Raw author name contains |
+| `--issn` | Only this journal, by any of its ISSNs |
+| `--from`, `--to` | Date range, as a full date |
+| `--cites` | Only works citing this one, by DOI or work id |
+| `--cited-by` | Only works this one cites, by DOI or work id |
+| `--rows` | Results per page, capped by OpenAlex at 200 |
+| `--page` | Which page of results |
+| `--envelope` | Print the whole envelope |
+
+```bash
+spr openalex 10.1007/s10994-021-05946-3
+spr openalex W3014596384
+spr openalex --query "aleatoric uncertainty" --from 2020-01-01 --rows 50
+spr openalex --issn 0885-6125 --from 2024-01-01
+spr openalex --cited-by W3014596384
+spr openalex 10.1007/s10994-021-05946-3 -o json | jq -r '.authors[].institutions[].ror'
+```
+
+The abstract arrives as an inverted index, a map of word to the positions it appears at, and is put back in reading order before it is printed. Institutions carry ROR ids and country codes, which is the only place in this tool where an affiliation is an identifier rather than a string. Both `concepts` and `topics` are printed, because OpenAlex publishes both classifications and they disagree.
+
+The stored citation count always prints with the date it was stored on:
+
+```
+counts
+  openalex_citations             1,563, as stored on 2026-08-16T07:02:28.622633
+  openalex_references            111 resolved to works in the index
+  fwci                           113.99, against the average work of its field, year and type
+```
+
+That number is an aggregate rebuilt on its own schedule and the live listing counted 1,554 for the same work in the same minute. The date is what makes the difference explicable rather than alarming, which is why it is never printed without it.
+
+## `spr cited-by`
+
+```
+spr cited-by <doi or work id> [flags]
+```
+
+The direction link.springer.com has no page for. A work page lists what a work cites. Nothing on the site lists what cites it, and the metrics page states a total attributed to Dimensions without naming a single citing work.
+
+| Flag | Meaning |
+|---|---|
+| `--by-year` | Counts grouped by publication year, one request instead of a full listing |
+| `--limit` | How many citing works to list, `0` for every one of them at 200 per request |
+
+```bash
+spr cited-by 10.1007/s10994-021-05946-3
+spr cited-by 10.1007/s10994-021-05946-3 --by-year
+spr cited-by W3014596384 --limit 0
+spr cited-by 10.1007/s10994-021-05946-3 -o json | jq -r '.works[].doi' | spr work
+```
+
+The total it prints is the count of this listing and not the record's stored `cited_by_count`. The two were 1,554 and 1,563 for the same work in the same minute, because one is the live index and the other is an aggregate. Both are OpenAlex's and the output says which one it is holding.
+
+A DOI costs one extra request, because the citation listing is keyed on the work id and the DOI has to be looked up first. A `W` id costs nothing. `--by-year` gets the whole history in one request rather than the eight a full listing of 1,554 works costs, which is the cheap way to ask when a work was read rather than by whom.
+
+## `spr api`
+
+```
+spr api [terms] [flags]
+```
+
+The publisher's own API rather than the web site, and the only surface here that needs a credential.
+
+| Flag | Meaning |
+|---|---|
+| `--endpoint` | Which endpoint: `meta/v2`, `metadata` or `openaccess` |
+| `--doi`, `--issn`, `--isbn` | One work, one journal or one book |
+| `--title`, `--keyword`, `--subject`, `--type` | The publisher's own query fields, quoted for you when they have a space |
+| `--year`, `--from`, `--to` | Publication year, or a date range as `yyyy-mm-dd` |
+| `--start` | First record, one based rather than zero based |
+| `--rows` | Records per page |
+| `--envelope` | Print the whole envelope |
+
+```bash
+spr api "aleatoric uncertainty"
+spr api --doi 10.1007/s10994-021-05946-3
+spr api --issn 0885-6125 --year 2021 --rows 50
+spr api --endpoint openaccess --keyword "machine learning"
+spr api -o json --doi 10.1007/s10994-021-05946-3 | jq .envelope.unread
+```
+
+The key is read from `SPRINGER_API_KEY` or from the config file, and it is never printed, never cached and never written to a record. It travels in the query string because that is the only way these endpoints accept one, and everything downstream of the request sees the url with the key blanked out. A missing key and a wrong key are both a 401 with an identical body, so the error says where to put one rather than guessing which of the two happened.
+
+Every field this command decodes comes from the published schema and not from a measured response, because no key was available to measure one with. The envelope lists every top level key of the answer that the decoder did not read, so the first run with a real key reports the gap rather than hiding it.
 
 ## `spr extraction`
 
