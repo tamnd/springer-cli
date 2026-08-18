@@ -134,6 +134,16 @@ spr tables 10.1007/s10994-021-05946-3 1      # the rows
 
 That last one is not a convenience. The article page announces its tables and contains zero `<table>` elements, so the rows are published on the subpage and nowhere else. [Counts and assets](/guides/counts-and-assets/) has the measurements.
 
+## List what is there, rather than searching it
+
+```bash
+spr sitemap                                  # one request, the shape of the whole site
+spr sitemap --static journals                # three requests, every journal there is
+spr sitemap --kind article --since 2026-08-01 | spr work
+```
+
+Urls go to stdout one per line and everything else goes to stderr, so that last line is a pipeline. The date in a shard's file name is a bucket and not a publication date, which is the one thing worth reading [the guide](/guides/sitemaps/) for before walking any of it.
+
 ## Take the raw page, or json
 
 ```bash

@@ -99,6 +99,16 @@ The article page carries every figure inline, so listing them costs nothing and 
 
 The article page carries no tables at all. The open access capture is 718 KB of html which announces one table, links to it, and contains zero `<table>` elements. So `spr work -o json` gives you a `tables` array of captions and links with no rows in it, deliberately, and `spr tables <doi> 1` is the only way to read one.
 
+## A date in a sitemap file name is not a date
+
+The sitemaps are the only complete enumeration of this site, and the first thing to know about them is what their dates mean.
+
+The index holds 10,408 child sitemaps. 66 of them are named `sitemap_2020-01-01_N`, which is roughly 330,000 works filed under one nominal day, because the first of January is where everything known only to its year ends up. Read the first of those shards and its 5,000 urls carry 173 distinct `lastmod` values running from 2020-01-23 to 2026-08-17, and not one of them is 2020-01-01.
+
+So the field is called `bucket` everywhere in this tool, it is parsed from the file name, and no flag turns it into a published date. `--since` and `--until` say which shards to read, and a window compares against the span a bucket covers rather than its first instant, so `--since 1850-06-01` still keeps a shard filed under 1850.
+
+The same care applies to the bill. A walk of everything is 10,408 requests and five and three quarter hours, and the estimate for it is computed from the index that was just fetched rather than from a number compiled in here, because the index grows every day.
+
 ## Two search paths that disagree
 
 `/search` and `/search.rss` are one query engine and two answers. Fetched for the same query in the same minute, HTML page 1 and RSS page 1 share 3 results out of 20.
@@ -140,6 +150,10 @@ spr metrics 10.1007/s10994-021-05946-3          # accesses, citations and attent
 spr figures 10.1007/s10994-021-05946-3          # the figure list, off the article page
 spr figures 10.1007/s10994-021-05946-3 1        # one figure at full resolution
 spr tables 10.1007/s10994-021-05946-3 1         # one table, rows and all
+spr sitemap                                     # the shape of the whole site, one request
+spr sitemap --static journals                   # every journal there is, three requests
+spr sitemap --kind article --since 2026-08-01   # urls, one per line, ready to pipe
+spr sitemap --all --yes --resume > urls.txt     # 10,408 shards, resumable
 spr extraction                                  # the field table: rung, source, reason
 spr extraction authors
 spr extraction journal.title

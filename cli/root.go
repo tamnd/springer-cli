@@ -128,6 +128,7 @@ func Root() *cobra.Command {
 		metricsCmd(),
 		figuresCmd(),
 		tablesCmd(),
+		sitemapCmd(),
 		extractionCmd(),
 		versionCmd(),
 		cacheCmd(),

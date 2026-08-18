@@ -306,19 +306,28 @@ func queryLine(q spr.Query) string {
 	return strings.Join(parts, ", ")
 }
 
-// estimate rounds a duration to something worth reading. Nobody needs 2m5s.
+// estimate rounds a duration to something worth reading. Nobody needs 2m5s, and
+// nobody reading the bill for a walk of every shard needs 20807s either, which
+// is why this goes as far as hours.
 func estimate(d time.Duration) string {
 	switch {
 	case d <= 0:
 		return "immediate"
 	case d < time.Minute:
 		return fmt.Sprintf("%d seconds", int(d.Round(time.Second).Seconds()))
+	case d < time.Hour:
+		m := int(d.Round(time.Minute).Minutes())
+		if m < 1 {
+			m = 1
+		}
+		return fmt.Sprintf("%d %s", m, plural(m, "minute"))
 	}
-	m := int(d.Round(time.Minute).Minutes())
-	if m < 1 {
-		m = 1
+	d = d.Round(time.Minute)
+	h, m := int(d/time.Hour), int(d%time.Hour/time.Minute)
+	if m == 0 {
+		return fmt.Sprintf("%d %s", h, plural(h, "hour"))
 	}
-	return fmt.Sprintf("%d %s", m, plural(m, "minute"))
+	return fmt.Sprintf("%d %s %d %s", h, plural(h, "hour"), m, plural(m, "minute"))
 }
 
 func plural(n int, word string) string {

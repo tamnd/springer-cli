@@ -70,8 +70,10 @@ func (p *Pacer) Interval() time.Duration {
 	return p.interval
 }
 
-// Bucket names the pace bucket a url belongs to.
-func Bucket(raw string) string {
+// PaceBucket names the pace bucket a url belongs to. It is not the sitemap
+// Bucket, which is a date in a file name, and the two are named apart here
+// because a package with one word for both would be a package that mixes them.
+func PaceBucket(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
 		return raw
@@ -98,7 +100,7 @@ func (p *Pacer) intervalFor(bucket string) time.Duration {
 
 // Wait blocks until the bucket for this url is due, or until ctx is done.
 func (p *Pacer) Wait(ctx context.Context, raw string) error {
-	bucket := Bucket(raw)
+	bucket := PaceBucket(raw)
 
 	p.mu.Lock()
 	now := p.now()
