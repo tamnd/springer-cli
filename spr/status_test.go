@@ -169,8 +169,8 @@ func TestAccess(t *testing.T) {
 		{``, ""},
 	}
 	for _, tc := range cases {
-		if got := Access([]byte(tc.body)); got != tc.want {
-			t.Errorf("Access(%q) = %q, want %q", tc.body, got, tc.want)
+		if got := DeclaredAccess([]byte(tc.body)); got != tc.want {
+			t.Errorf("DeclaredAccess(%q) = %q, want %q", tc.body, got, tc.want)
 		}
 	}
 }
@@ -184,7 +184,7 @@ func TestAccessScanIsBounded(t *testing.T) {
 		body[i] = ' '
 	}
 	copy(body[headBytes+8:], []byte(`<meta name="access" content="No">`))
-	if got := Access(body); got != "" {
+	if got := DeclaredAccess(body); got != "" {
 		t.Errorf("Access read past the %d byte head bound and returned %q", headBytes, got)
 	}
 }

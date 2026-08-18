@@ -1,0 +1,90 @@
+# The capture ledger.
+#
+# Nine real pages, fetched 2026-08-18, extracted by the current code. Fewer
+# fields set or more missed is a regression and fails. More fields set is an
+# improvement and also fails, until this file is updated, so that an
+# improvement is always a reviewed change. A change in unread regions is drift
+# and is reported without failing, because Springer shipping a new component is
+# news about the site rather than a bug in this tool.
+#
+# Rewrite with: go test ./spr -run TestCaptureLedger -update
+
+article_oa.html
+  meta names   66
+  json-ld      1
+  vocabularies highwire+dc+prism
+  data-test    54
+  access       agree
+  unread       50
+  set          abstract access access.world_readable api_url article_type authors body_text container_abbrev container_title copyright corresponding cover_date doi equations figures first_page footnotes fulltext_url issn issue keywords language last_page license modified online pages pdf_url published publisher rails ref_links references rights rights_agent section_label sections subjects title volume
+
+article_subscription.html
+  meta names   66
+  json-ld      1
+  vocabularies highwire+dc+prism
+  data-test    53
+  access       agree
+  unread       49
+  set          abstract access access.world_readable api_url article_type authors body_text container_abbrev container_title copyright corresponding cover_date doi equations figures first_page footnotes fulltext_url issn issue keywords language last_page modified online pages pdf_url published publisher rails ref_links references rights rights_agent section_label sections subjects title volume
+
+chapter.html
+  meta names   32
+  json-ld      1
+  vocabularies highwire+dc
+  data-test    49
+  access       agree
+  unread       48
+  set          abstract abstract_url access access.statement api_url article_type authors container_title copyright corresponding doi first_page footnotes fulltext_url isbn language last_page pages pdf_url published publisher rails sections title
+  missed       body keywords references
+
+protocol.html
+  meta names   33
+  json-ld      1
+  vocabularies highwire+dc
+  data-test    47
+  access       agree
+  unread       46
+  set          abstract abstract_url access access.statement api_url article_type authors container_title copyright corresponding doi first_page fulltext_url isbn issn keywords language last_page pages pdf_url published publisher rails ref_links references sections title
+  missed       body
+
+referenceworkentry.html
+  meta names   32
+  json-ld      1
+  vocabularies highwire+dc
+  data-test    43
+  access       agree
+  unread       42
+  set          abstract_url access access.statement api_url article_type authors container_title copyright corresponding doi first_page fulltext_url isbn language last_page pages pdf_url published publisher ref_links references sections title
+  missed       abstract body keywords
+
+book.html
+  meta names   8
+  json-ld      3
+  vocabularies highwire
+  data-test    58
+  access       one only
+  extracted    no, this milestone reads work pages only
+
+journal.html
+  meta names   8
+  json-ld      1
+  vocabularies none
+  data-test    58
+  access       neither
+  extracted    no, this milestone reads work pages only
+
+series.html
+  meta names   9
+  json-ld      1
+  vocabularies none
+  data-test    32
+  access       neither
+  extracted    no, this milestone reads work pages only
+
+volumes.html
+  meta names   8
+  json-ld      0
+  vocabularies none
+  data-test    30
+  access       neither
+  extracted    no, this milestone reads work pages only

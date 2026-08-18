@@ -59,10 +59,10 @@ var accessMeta = regexp.MustCompile(`(?i)<meta[^>]+name=["']access["'][^>]+conte
 // fetch buys nothing.
 const headBytes = 128 << 10
 
-// Access reports the publisher's access statement, "Yes", "No", or "" when the
-// page does not carry one. Container pages carry no statement at all, which is
-// why the empty string is a normal answer and not a parse failure.
-func Access(body []byte) string {
+// DeclaredAccess reports the publisher's access statement, "Yes", "No", or ""
+// when the page does not carry one. Container pages carry no statement at all,
+// which is why the empty string is a normal answer and not a parse failure.
+func DeclaredAccess(body []byte) string {
 	head := body
 	if len(head) > headBytes {
 		head = head[:headBytes]
@@ -95,7 +95,7 @@ func Classify(code int, header http.Header, body []byte, want Kind) Status {
 	if !want.Matches(header.Get("Content-Type"), body) {
 		return StatusWrongKind
 	}
-	if Access(body) == "No" {
+	if DeclaredAccess(body) == "No" {
 		return StatusRestricted
 	}
 	return StatusOK
