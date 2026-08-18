@@ -129,6 +129,13 @@ type ldEntity struct {
 	Keywords flexStrings `json:"keywords"`
 	Image    flexStrings `json:"image"`
 
+	// ISBN and CopyrightYear appear on a book block and nowhere else. The isbn
+	// there is the electronic edition, which is the one the doi resolves to, and
+	// not the hardcover the page prices beside it.
+	ISBN          flexStrings `json:"isbn"`
+	CopyrightYear string      `json:"copyrightYear"`
+	NumberOfPages int         `json:"numberOfPages"`
+
 	IsAccessibleForFree *bool `json:"isAccessibleForFree"`
 
 	Author    []ldPerson `json:"author"`
@@ -248,6 +255,35 @@ func (ld *linkData) work() *ldEntity {
 			if b.is(t) {
 				return b
 			}
+		}
+	}
+	return nil
+}
+
+// bookTypes are the schema.org types a container page declares for itself.
+// Product is in the list because a book page ships three blocks, one Book and
+// two identical Products, and a page that ever drops the Book block still
+// states its isbn in the Product.
+var bookTypes = []string{"Book", "PublicationVolume", "Periodical"}
+
+// book returns the block describing the container, preferring a real Book over
+// the Product offers that follow it. It returns nil on a journal or a series
+// page, whose only JSON-LD describes the web page rather than the thing, which
+// is a normal outcome and not a failure.
+func (ld *linkData) book() *ldEntity {
+	if ld == nil {
+		return nil
+	}
+	for _, b := range ld.blocks {
+		for _, t := range bookTypes {
+			if b.is(t) {
+				return b
+			}
+		}
+	}
+	for _, b := range ld.blocks {
+		if b.is("Product") && b.ISBN.First() != "" {
+			return b
 		}
 	}
 	return nil

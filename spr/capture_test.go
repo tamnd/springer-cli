@@ -27,21 +27,25 @@ type capture struct {
 	// and not the effective one.
 	url string
 
-	// kind is the record type it should produce, or the empty string for a
-	// container page that this milestone does not extract.
+	// record is which extractor reads this page: work, journal, book, series or
+	// volumes. It is a separate column from kind because a work page has both,
+	// and a container page has a record and no work type at all.
+	record string
+
+	// kind is the work type the record should carry, on a work page only.
 	kind string
 }
 
 var captures = []capture{
-	{"article_oa.html", "https://link.springer.com/article/10.1007/s10994-021-05946-3", "article"},
-	{"article_subscription.html", "https://link.springer.com/article/10.1007/s10994-024-06594-z", "article"},
-	{"chapter.html", "https://link.springer.com/chapter/10.1007/978-3-031-28170-9_6", "chapter"},
-	{"protocol.html", "https://link.springer.com/protocol/10.1007/978-1-0716-2067-0_1", "protocol"},
-	{"referenceworkentry.html", "https://link.springer.com/referenceworkentry/10.1007/978-3-642-27737-5_100-2", "entry"},
-	{"book.html", "https://link.springer.com/book/10.1007/978-3-031-28170-9", ""},
-	{"journal.html", "https://link.springer.com/journal/10994", ""},
-	{"series.html", "https://link.springer.com/series/558", ""},
-	{"volumes.html", "https://link.springer.com/journal/10994/volumes-and-issues", ""},
+	{"article_oa.html", "https://link.springer.com/article/10.1007/s10994-021-05946-3", "work", "article"},
+	{"article_subscription.html", "https://link.springer.com/article/10.1007/s10994-024-06594-z", "work", "article"},
+	{"chapter.html", "https://link.springer.com/chapter/10.1007/978-3-031-28170-9_6", "work", "chapter"},
+	{"protocol.html", "https://link.springer.com/protocol/10.1007/978-1-0716-2067-0_1", "work", "protocol"},
+	{"referenceworkentry.html", "https://link.springer.com/referenceworkentry/10.1007/978-3-642-27737-5_100-2", "work", "entry"},
+	{"book.html", "https://link.springer.com/book/10.1007/978-3-031-28170-9", "book", ""},
+	{"journal.html", "https://link.springer.com/journal/10994", "journal", ""},
+	{"series.html", "https://link.springer.com/series/558", "series", ""},
+	{"volumes.html", "https://link.springer.com/journal/10994/volumes-and-issues", "volumes", ""},
 }
 
 // fetchedAt is the moment the captures were taken. The extractor stamps the

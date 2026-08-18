@@ -93,6 +93,22 @@ func findClass(root *html.Node, class string) []*html.Node {
 	return out
 }
 
+// firstClass returns the first element carrying the class token, or nil.
+func firstClass(root *html.Node, class string) *html.Node {
+	var found *html.Node
+	walk(root, func(n *html.Node) bool {
+		if found != nil {
+			return false
+		}
+		if hasClass(n, class) {
+			found = n
+			return false
+		}
+		return true
+	})
+	return found
+}
+
 // countClass counts elements carrying the class token.
 func countClass(root *html.Node, class string) int {
 	return len(findClass(root, class))
@@ -108,6 +124,25 @@ func findTag(root *html.Node, a atom.Atom) []*html.Node {
 		return true
 	})
 	return out
+}
+
+// firstTag returns the first element with this tag name, or nil. The container
+// extractors want the first of something far more often than all of it, and
+// writing that as a loop that breaks on its first pass reads as though the rest
+// mattered.
+func firstTag(root *html.Node, a atom.Atom) *html.Node {
+	var found *html.Node
+	walk(root, func(n *html.Node) bool {
+		if found != nil {
+			return false
+		}
+		if n.DataAtom == a {
+			found = n
+			return false
+		}
+		return true
+	})
+	return found
 }
 
 // blocks are the elements that end a line when a browser lays them out.

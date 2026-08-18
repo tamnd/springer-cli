@@ -60,6 +60,18 @@ envelope      html, ok, 718572 bytes, 3 redirects, fetched 2026-08-18 10:12:04 U
 
 Add `--envelope` to see which rung answered each field, and run `spr extraction` for the table of which rung is expected to answer what, and why. There is a longer walkthrough in [reading one work](/guides/reading-one-work/).
 
+## Read the thing it was published in
+
+```bash
+spr journal 10994                    # by Springer id, or by either issn
+spr journal 10994 --volumes          # 114 volumes and 348 issues, one more request
+spr book 978-3-031-28170-9           # by isbn, or by doi
+spr book --chapters 10.1007/978-3-031-28170-9
+spr series 558
+```
+
+Three pages, three records, because a journal has an impact factor and no price and a book has four ISBNs and no volumes. [Reading a container](/guides/reading-a-container/) covers what each one carries and where it comes from.
+
 ## Take the raw page, or json
 
 ```bash

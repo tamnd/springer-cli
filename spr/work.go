@@ -117,6 +117,13 @@ type Author struct {
 	Affiliations []Affiliation `json:"affiliations,omitempty"`
 	Sequence     string        `json:"sequence,omitempty"`
 	Position     int           `json:"position"`
+
+	// Role is the title a container page prints over a name, Editor-in-Chief on
+	// a journal and Series Editor on a series. A work page never states one, so
+	// this field fills only on the containers, where the role is the point: an
+	// editorial board with every name flattened to editor has lost the fact the
+	// page went to the trouble of printing.
+	Role string `json:"role,omitempty"`
 }
 
 // Affiliation is where an author says they work. The page gives a name and a

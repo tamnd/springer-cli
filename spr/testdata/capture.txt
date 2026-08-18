@@ -1,90 +1,119 @@
 # The capture ledger.
 #
-# Nine real pages, fetched 2026-08-18, extracted by the current code. Fewer
-# fields set or more missed is a regression and fails. More fields set is an
-# improvement and also fails, until this file is updated, so that an
-# improvement is always a reviewed change. A change in unread regions is drift
-# and is reported without failing, because Springer shipping a new component is
-# news about the site rather than a bug in this tool.
+# Nine real pages across five record types, fetched 2026-08-18, extracted by the current code.
+#
+# Fewer fields set or more missed is a regression and fails. More fields set is an improvement
+# and also fails, until this file is updated, so that an improvement is always a reviewed change.
+# A change in unread regions is drift and is reported without failing, because Springer shipping
+# a new component is news about the site rather than a bug in this tool.
+#
+# The datalayer line counts the two analytics forms separately. Assigned is window.dataLayer =
+# [{...}], which is strict JSON and parses on every page. Pushed is window.dataLayer.push({...}),
+# which is javascript and parses on none of them, and is carried to the envelope unread. Both
+# numbers are non zero on every capture here, so the readable and unreadable split is by form
+# and not by page type.
 #
 # Rewrite with: go test ./spr -run TestCaptureLedger -update
 
 article_oa.html
+  record       work
   meta names   66
   json-ld      1
   vocabularies highwire+dc+prism
   data-test    54
+  datalayer    1 assigned, 1 pushed, 0 broken
   access       agree
   unread       50
   set          abstract access access.world_readable api_url article_type authors body_text container_abbrev container_title copyright corresponding cover_date doi equations figures first_page footnotes fulltext_url issn issue keywords language last_page license modified online pages pdf_url published publisher rails ref_links references rights rights_agent section_label sections subjects title volume
 
 article_subscription.html
+  record       work
   meta names   66
   json-ld      1
   vocabularies highwire+dc+prism
   data-test    53
+  datalayer    1 assigned, 1 pushed, 0 broken
   access       agree
   unread       49
   set          abstract access access.world_readable api_url article_type authors body_text container_abbrev container_title copyright corresponding cover_date doi equations figures first_page footnotes fulltext_url issn issue keywords language last_page modified online pages pdf_url published publisher rails ref_links references rights rights_agent section_label sections subjects title volume
 
 chapter.html
+  record       work
   meta names   32
   json-ld      1
   vocabularies highwire+dc
   data-test    49
+  datalayer    1 assigned, 1 pushed, 0 broken
   access       agree
   unread       48
   set          abstract abstract_url access access.statement api_url article_type authors container_title copyright corresponding doi first_page footnotes fulltext_url isbn language last_page pages pdf_url published publisher rails sections title
   missed       body keywords references
 
 protocol.html
+  record       work
   meta names   33
   json-ld      1
   vocabularies highwire+dc
   data-test    47
+  datalayer    1 assigned, 1 pushed, 0 broken
   access       agree
   unread       46
   set          abstract abstract_url access access.statement api_url article_type authors container_title copyright corresponding doi first_page fulltext_url isbn issn keywords language last_page pages pdf_url published publisher rails ref_links references sections title
   missed       body
 
 referenceworkentry.html
+  record       work
   meta names   32
   json-ld      1
   vocabularies highwire+dc
   data-test    43
+  datalayer    1 assigned, 1 pushed, 0 broken
   access       agree
   unread       42
   set          abstract_url access access.statement api_url article_type authors container_title copyright corresponding doi first_page fulltext_url isbn language last_page pages pdf_url published publisher ref_links references sections title
   missed       abstract body keywords
 
 book.html
+  record       book
   meta names   8
   json-ld      3
   vocabularies highwire
   data-test    58
+  datalayer    1 assigned, 1 pushed, 0 broken
   access       one only
-  extracted    no, this milestone reads work pages only
+  unread       43
+  set          access access.oa_status accesses authors chapters citations copyright copyright_year doi edition illustrations isbn_electronic isbn_hardcover isbn_print isbn_softcover keywords offers packages pages product_type published published_hardcover published_softcover publisher series series_issn subjects subtitle title
 
 journal.html
+  record       journal
   meta names   8
   json-ld      1
   vocabularies none
   data-test    58
+  datalayer    1 assigned, 1 pushed, 0 broken
   access       neither
-  extracted    no, this milestone reads work pages only
+  unread       43
+  set          about continuous_publication copyright editors electronic_issn imprint indexed_in metrics open_access_articles print_issn publisher_brand publishing_model springer_id subjects title
+  missed       metrics
 
 series.html
+  record       series
   meta names   9
   json-ld      1
   vocabularies none
   data-test    32
+  datalayer    1 assigned, 1 pushed, 0 broken
   access       neither
-  extracted    no, this milestone reads work pages only
+  unread       24
+  set          about editors electronic_issn indexed_in latest_titles print_issn series_id title
 
 volumes.html
+  record       volumes
   meta names   8
   json-ld      0
   vocabularies none
   data-test    30
+  datalayer    1 assigned, 1 pushed, 0 broken
   access       neither
-  extracted    no, this milestone reads work pages only
+  unread       29
+  set          journal volumes

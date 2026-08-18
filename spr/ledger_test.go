@@ -13,10 +13,10 @@ import (
 // The capture ledger.
 //
 // testdata/capture.txt records, per capture, which fields the extractor set,
-// which it named as missed, how many regions it left unread, and the three
-// site specific signals. TestCaptureLedger runs the extractor over all nine
-// captures and compares. The comparison has three outcomes and they are
-// deliberately not the same:
+// which it named as missed, how many regions it left unread, and the site
+// specific signals. TestCaptureLedger runs the right extractor over each of the
+// nine captures, five records between them, and compares. The comparison has
+// three outcomes and they are deliberately not the same:
 //
 //   - Fewer fields set, or more missed. A regression. Fails.
 //   - More fields set. An improvement, and it fails until the ledger is
@@ -42,13 +42,15 @@ type ledgerEntry struct {
 	agreed  string
 	metas   int
 	regions int
+	layer   string
+	record  string
 }
 
 // report runs the extractor over one capture and describes what came out.
 func report(t *testing.T, c capture) ledgerEntry {
 	t.Helper()
 	resp := load(t, c)
-	e := ledgerEntry{name: c.file}
+	e := ledgerEntry{name: c.file, record: c.record}
 
 	doc, err := parseDoc(resp.Body)
 	if err != nil {
@@ -76,28 +78,71 @@ func report(t *testing.T, c capture) ledgerEntry {
 	// reason a disagreement is worth watching for.
 	e.agreed = accessAgreement(meta, ld)
 
-	if c.kind == "" {
-		e.unread = -1
-		return e
-	}
+	// The analytics payload, which every page on this site ships twice. The
+	// assignment form is strict JSON and parses everywhere. The push form is
+	// JavaScript with single quotes and parses nowhere, and it is the one
+	// carrying the data-test attribute. The split is by form and not by page
+	// type, which is worth a column of its own precisely because it is easy to
+	// assume otherwise.
+	dl := parseDataLayer(doc)
+	e.layer = fmt.Sprintf("%d assigned, %d pushed, %d broken", len(dl.entries), len(dl.pushes), dl.broken)
 
-	w, err := ExtractWork(resp)
+	env, err := extractCapture(resp, c)
 	if err != nil {
 		t.Fatalf("%s: %v", c.file, err)
 	}
-	if w.Type != c.kind {
-		t.Errorf("%s: extracted as %q, want %q", c.file, w.Type, c.kind)
-	}
-	for f := range w.Envelope.Via {
+	for f := range env.Via {
 		e.fields = append(e.fields, f)
 	}
 	sort.Strings(e.fields)
-	for _, m := range w.Envelope.Missed {
+	for _, m := range env.Missed {
 		e.missed = append(e.missed, m.Field)
 	}
 	sort.Strings(e.missed)
-	e.unread = len(w.Envelope.Unread)
+	e.unread = len(env.Unread)
 	return e
+}
+
+// extractCapture runs the extractor this capture is for and returns its
+// envelope, which is the only part of five different record types the ledger
+// compares.
+func extractCapture(resp *Response, c capture) (Envelope, error) {
+	switch c.record {
+	case "work":
+		w, err := ExtractWork(resp)
+		if err != nil {
+			return Envelope{}, err
+		}
+		if w.Type != c.kind {
+			return Envelope{}, fmt.Errorf("extracted as %q, want %q", w.Type, c.kind)
+		}
+		return w.Envelope, nil
+	case "journal":
+		j, err := ExtractJournal(resp)
+		if err != nil {
+			return Envelope{}, err
+		}
+		return j.Envelope, nil
+	case "book":
+		b, err := ExtractBook(resp)
+		if err != nil {
+			return Envelope{}, err
+		}
+		return b.Envelope, nil
+	case "series":
+		s, err := ExtractSeries(resp)
+		if err != nil {
+			return Envelope{}, err
+		}
+		return s.Envelope, nil
+	case "volumes":
+		v, err := ExtractVolumes(resp)
+		if err != nil {
+			return Envelope{}, err
+		}
+		return v.Envelope, nil
+	}
+	return Envelope{}, fmt.Errorf("no extractor is registered for record %q", c.record)
 }
 
 // accessAgreement compares the two independent access declarations.
@@ -123,15 +168,13 @@ func accessAgreement(m *Meta, ld *linkData) string {
 func (e ledgerEntry) String() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n", e.name)
+	fmt.Fprintf(&b, "  record       %s\n", e.record)
 	fmt.Fprintf(&b, "  meta names   %d\n", e.metas)
 	fmt.Fprintf(&b, "  json-ld      %d\n", e.jsonld)
 	fmt.Fprintf(&b, "  vocabularies %s\n", e.vocabs)
 	fmt.Fprintf(&b, "  data-test    %d\n", e.regions)
+	fmt.Fprintf(&b, "  datalayer    %s\n", e.layer)
 	fmt.Fprintf(&b, "  access       %s\n", e.agreed)
-	if e.unread < 0 {
-		fmt.Fprintf(&b, "  extracted    no, this milestone reads work pages only\n")
-		return b.String()
-	}
 	fmt.Fprintf(&b, "  unread       %d\n", e.unread)
 	fmt.Fprintf(&b, "  set          %s\n", strings.Join(e.fields, " "))
 	if len(e.missed) > 0 {
@@ -202,6 +245,9 @@ func TestCaptureLedger(t *testing.T) {
 		if w.jsonld != e.jsonld {
 			t.Errorf("%s: json-ld blocks went from %d to %d", e.name, w.jsonld, e.jsonld)
 		}
+		if w.layer != e.layer {
+			t.Errorf("%s: the analytics payload went from %q to %q", e.name, w.layer, e.layer)
+		}
 	}
 	t.Errorf("the ledger and the extractor disagree; rerun with -update once the differences above are understood")
 }
@@ -248,6 +294,10 @@ func parseLedger(s string) map[string]ledgerEntry {
 			_, _ = fmt.Sscanf(value, "names %d", &cur.metas)
 		case "data-test":
 			_, _ = fmt.Sscanf(value, "%d", &cur.regions)
+		case "datalayer":
+			cur.layer = value
+		case "record":
+			cur.record = value
 		}
 	}
 	if cur != nil {
@@ -281,12 +331,18 @@ func diff(a, b []string) (gained, lost []string) {
 
 const ledgerHeader = `# The capture ledger.
 #
-# Nine real pages, fetched 2026-08-18, extracted by the current code. Fewer
-# fields set or more missed is a regression and fails. More fields set is an
-# improvement and also fails, until this file is updated, so that an
-# improvement is always a reviewed change. A change in unread regions is drift
-# and is reported without failing, because Springer shipping a new component is
-# news about the site rather than a bug in this tool.
+# Nine real pages across five record types, fetched 2026-08-18, extracted by the current code.
+#
+# Fewer fields set or more missed is a regression and fails. More fields set is an improvement
+# and also fails, until this file is updated, so that an improvement is always a reviewed change.
+# A change in unread regions is drift and is reported without failing, because Springer shipping
+# a new component is news about the site rather than a bug in this tool.
+#
+# The datalayer line counts the two analytics forms separately. Assigned is window.dataLayer =
+# [{...}], which is strict JSON and parses on every page. Pushed is window.dataLayer.push({...}),
+# which is javascript and parses on none of them, and is carried to the envelope unread. Both
+# numbers are non zero on every capture here, so the readable and unreadable split is by form
+# and not by page type.
 #
 # Rewrite with: go test ./spr -run TestCaptureLedger -update
 `
