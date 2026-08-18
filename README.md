@@ -47,6 +47,8 @@ Reading a work is four rungs, tried in order, and the first one that answers win
 
 Authors are the one deliberate exception and come from rung 2. Highwire emits three parallel arrays for name, institution and email and lines them up by position, which breaks the moment one author has two affiliations, and breaks silently. JSON-LD binds the three to the right person.
 
+A container page is rung 3 and rung 4 work throughout. There is no `citation_journal_title` on a journal home page and no `citation_isbn` on a book page, because nothing outside the publisher reads those pages for bibliographic metadata the way Scholar reads an article. Every field on a journal, book or series therefore comes from Springer's own `data-test` region names or, failing that, a css class and a printed English label, and the record says so rather than letting a fragile field look as solid as a durable one.
+
 `spr extraction` prints the whole table, one row per field, with the reason each row sits where it does. Every record then carries an envelope saying which rung actually answered:
 
 ```console
@@ -88,8 +90,15 @@ docker run --rm ghcr.io/tamnd/spr:latest --help
 spr work 10.1007/s10994-021-05946-3             # one article, chapter, protocol or entry
 spr work --envelope /chapter/10.1007/978-3-030-58607-2_1
 spr work -o json 10.1007/s10994-021-05946-3 | jq .references
+spr journal 10994                               # a journal, by id or by either issn
+spr journal 10994 --volumes                     # 114 volumes and 348 issues
+spr book 978-3-031-28170-9                      # a book, by isbn or by doi
+spr book --chapters 10.1007/978-3-031-28170-9
+spr series 558                                  # a book series
 spr extraction                                  # the field table: rung, source, reason
 spr extraction authors
+spr extraction journal.title
+spr extraction --record book
 spr extraction --rung selector
 spr get /article/10.1007/s10994-021-05946-3     # fetch and classify one url
 spr get --body /journal/10994 > journal.html    # the raw page
@@ -145,7 +154,7 @@ make fmt
 
 ## Status
 
-Building towards [v0.1.0](https://github.com/tamnd/springer-cli/issues/2). The client, its classifier, the identifiers and the work record are in; container records, subpages, search, sitemaps, the open indexes and the graph follow.
+Building towards [v0.1.0](https://github.com/tamnd/springer-cli/issues/2). The client, its classifier, the identifiers, the work record and the container records are in; subpages, search, sitemaps, the open indexes and the graph follow.
 
 ## License
 
