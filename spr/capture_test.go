@@ -85,6 +85,30 @@ var feeds = []capture{
 	{"search_empty.rss", searchFeedURL + "&page=200", "feed", ""},
 }
 
+// The sitemaps, kept out of the capture table for the same reason the feeds
+// are: the ledger reads html regions and there are none here.
+//
+// Ten of the twelve maps, chosen so that every finding in sitemap.go has bytes
+// behind it. The index is the whole 1.27 MB of it, because the four name
+// shapes, the lastmod coverage and the 66 shards at one nominal day are claims
+// about the whole file and a trimmed copy would prove none of them. The three
+// journal maps are all here because the overlap between them is the finding.
+// sitemap-collections.xml and sitemap_book_series.xml are the two that are left
+// out: they are 3.7 MB between them, and they are one flat urlset each with
+// nothing in them that the other urlsets do not already exercise.
+var maps = []capture{
+	{"sitemap_index.xml", Base + IndexPath, "sitemap", ""},
+	{"sitemap_day.xml", Base + "/sitemap-entries/sitemap_2020-01-01_1.xml", "sitemap", ""},
+	{"sitemap_year.xml", Base + "/sitemap-entries/sitemap_1850_1.xml", "sitemap", ""},
+	{"sitemap_empty.xml", Base + "/sitemap-entries/sitemap_2020-01-01_99.xml", "sitemap", ""},
+	{"sitemap_shops.txt", Base + "/sitemap-entries/sitemap_shops.txt", "sitemap", ""},
+	{"sitemap_brands.xml", Base + "/sitemap-entries/sitemap_brands.xml", "sitemap", ""},
+	{"sitemap_subjects.xml", Base + SubjectsIndexPath, "sitemap", ""},
+	{"sitemap_journals_springer.xml", Base + "/sitemap-springer-journals.xml", "sitemap", ""},
+	{"sitemap_journals_bmc.xml", Base + "/sitemap-bmc-springeropen-journals.xml", "sitemap", ""},
+	{"sitemap_journals_palgrave.xml", Base + "/sitemap-palgrave-journals.xml", "sitemap", ""},
+}
+
 // fetchedAt is the moment the captures were taken. The extractor stamps the
 // envelope from the response, so the tests hand it a fixed instant rather than
 // the clock, which keeps the ledger byte for byte reproducible.
@@ -111,11 +135,14 @@ func load(t *testing.T, c capture) *Response {
 		t.Fatalf("capture %s: %v", c.file, err)
 	}
 
-	// The feed is served as xml and everything else as html, and the classifier
-	// takes the kind rather than guessing it, so the loader states it here the
-	// way the client would have.
+	// The feeds and the sitemaps are served as xml, the shops map as text/plain,
+	// and everything else as html. The classifier takes the kind rather than
+	// guessing it, so the loader states it here the way the client would have.
 	kind := KindHTML
-	if strings.HasSuffix(c.file, ".rss") {
+	switch {
+	case strings.HasSuffix(c.file, ".rss"),
+		strings.HasSuffix(c.file, ".xml"),
+		strings.HasSuffix(c.file, ".txt"):
 		kind = KindXML
 	}
 
@@ -129,6 +156,18 @@ func load(t *testing.T, c capture) *Response {
 		// Three, the cookie dance, which is what every one of these cost.
 		Redirects: 3,
 	}
+}
+
+// capturedMap returns one named sitemap capture.
+func capturedMap(t *testing.T, file string) *Response {
+	t.Helper()
+	for _, c := range maps {
+		if c.file == file {
+			return load(t, c)
+		}
+	}
+	t.Fatalf("no sitemap capture named %s", file)
+	return nil
 }
 
 // capturedFeed returns one named feed capture.

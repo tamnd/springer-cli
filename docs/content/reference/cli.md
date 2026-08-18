@@ -23,6 +23,7 @@ Run `spr <command> --help` for the full flag list on any command, and see [confi
 | `metrics` | Read the accesses, citations and attention a work has drawn |
 | `figures` | List a work's figures, or read one at full size |
 | `tables` | List a work's tables, or read one in full |
+| `sitemap` | Enumerate what the site publishes, from its own sitemaps |
 | `extraction` | Print the extraction table: every field, the rung that answers it, and why |
 | `cache` | Show or clear the page cache |
 | `version` | Print the version, commit and build date |
@@ -365,6 +366,58 @@ Rows go out tab separated rather than aligned into columns. A cell here holds La
 Cells keep the LaTeX the publisher wrote. Rendering `\({\mathcal{X}}\)` into anything else would be this tool having an opinion about notation, and anyone who wants it rendered has a renderer.
 
 The heading on this page is one string with the label and the caption run together, `Table 1 Notation used throughout the paper`, where a figure gives them two separate elements. They are split on the label so that a caption is a caption on both records.
+
+## `spr sitemap`
+
+```
+spr sitemap [flags]
+```
+
+Reads the maps Springer publishes about itself, which are the only complete enumeration of what is on the site. There are twelve of them: one index of 10,408 dated shards, and eight static maps that between them name every journal, series and collection.
+
+With no flags it fetches the index and says what is in it, which is one request. `--static` fetches one of the eight. `--list` prints the child sitemap urls. `--since`, `--until` and `--kind` walk the shards and print the urls in them, one per line.
+
+| Flag | Meaning |
+|---|---|
+| `--static` | One of the static maps: `journals`, `series`, `collections`, `brands`, `shops`, `subjects` |
+| `--list` | Print the url of every child sitemap rather than what is in them |
+| `--kind` | Keep only these kinds, repeatable: `article`, `chapter`, `protocol`, `entry`, `referencework`, `book`, `journal`, `series`, `collection`, `brand`, `partner`, `shop` |
+| `--since`, `--until` | The bucket window to read: `2026`, `2026-08` or `2026-08-01` |
+| `--all` | Walk every shard in the index, which needs `--yes` |
+| `--yes` | Proceed with a walk that was billed rather than stopping |
+| `--limit` | Stop after this many urls |
+| `--resume` | Skip the shards an earlier run of this same selection finished |
+
+```bash
+spr sitemap
+spr sitemap --list
+spr sitemap --static journals
+spr sitemap --kind article --since 2026-08-01
+spr sitemap --kind book --since 2026-01-01 | spr work
+spr sitemap --all --yes --resume > urls.txt
+```
+
+```console
+$ spr sitemap
+index         https://link.springer.com/sitemap-index.xml
+children      10,408 child sitemaps
+buckets       8,106 named for a day, 2,252 for a month, 50 for a year
+span          1850 to 2026-08-18
+lastmod       on the 8,106 day shards only, where it restates the bucket
+bucket        where a record is filed, and not when it was published
+static        journals, series, collections, brands, shops, subjects, read with --static
+full walk     10,408 requests at 2s, 5 hours 47 minutes, bounded above by 52,040,000 urls and 5.5 GB
+```
+
+The date in a shard's file name is a bucket and not a publication date. The index holds 66 shards named `sitemap_2020-01-01_N`, roughly 330,000 works, because the first of January is where everything known only to its year is filed, and the entries inside the first of them carry 173 distinct `lastmod` values of which none is 2020-01-01. So `--since` and `--until` say which shards to read rather than what was published when, and nothing in this tool turns a bucket into a date.
+
+Urls go to stdout one per line and everything else goes to stderr, which is what makes `spr sitemap --kind book --since 2026 | spr work` a pipeline. With `-o json` the walk emits one object per line rather than an array, because the stream has no end to close an array with.
+
+The bill is computed from the index that was just fetched rather than from a figure compiled in, since the index grows daily. Above ten shards it is printed and the walk proceeds. Above a hundred, and always for `--all`, the walk stops until you pass `--yes`.
+
+`--resume` writes each shard's url to a state file under the cache directory as that shard finishes, keyed on the selection, so resuming a walk of the last three days never inherits the state of a walk of everything. A shard is marked only after every url in it has been printed, and a shard that did not answer is left unmarked and counted, so a resumed run comes back for it. `--resume` with `--no-cache` is a usage error rather than a run that quietly fails to resume.
+
+See the [enumerating the site](/guides/sitemaps/) guide for what the eight static maps hold and what a walk of everything costs.
 
 ## `spr extraction`
 

@@ -8,4 +8,4 @@ featured: true
 
 Each guide is built around a job rather than a command. They assume you have run the [quick start](/getting-started/quick-start/).
 
-[Reading one work](/guides/reading-one-work/) is the first, and [reading a container](/guides/reading-a-container/) covers the journal, book and series pages that hold them. [Counts and assets](/guides/counts-and-assets/) covers the three subpages a work has of its own, which is where a readership number, a full size figure and the actual rows of a table come from. Following a reference list arrives with the graph commands.
+[Reading one work](/guides/reading-one-work/) is the first, and [reading a container](/guides/reading-a-container/) covers the journal, book and series pages that hold them. [Counts and assets](/guides/counts-and-assets/) covers the three subpages a work has of its own, which is where a readership number, a full size figure and the actual rows of a table come from. [Enumerating the site](/guides/sitemaps/) is the other way in: not searching for something, but listing what is there. Following a reference list arrives with the graph commands.

@@ -56,8 +56,8 @@ func TestSearchHasItsOwnBucket(t *testing.T) {
 		{"https://api.openalex.org/works", "api.openalex.org"},
 	}
 	for _, tc := range cases {
-		if got := Bucket(tc.url); got != tc.want {
-			t.Errorf("Bucket(%q) = %q, want %q", tc.url, got, tc.want)
+		if got := PaceBucket(tc.url); got != tc.want {
+			t.Errorf("PaceBucket(%q) = %q, want %q", tc.url, got, tc.want)
 		}
 	}
 }
