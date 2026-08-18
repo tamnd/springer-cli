@@ -31,6 +31,9 @@ A command that fetched a page successfully and a command that fetched a paywalle
 | 4 | The publisher states `access=No`. The metadata was printed; only the body is missing. |
 | 5 | A network failure, a timeout, or a 5xx that outlived the retries |
 | 6 | An upstream said, in a header, that the budget is spent |
+| 7 | `spr verify` found that a page no longer reads the way the ledger recorded it |
+
+Seven is the only one of those that is a statement about the site rather than about the run, which is why it is not folded into any of the others. A scheduled job that wants to alert on Springer changing a page should not have to tell that apart from a mistyped flag.
 
 So this works the way you would want it to:
 

@@ -21,50 +21,10 @@ import (
 // uuid is not part of the page and keeping it would make every refresh look
 // like a rewrite.
 
-type capture struct {
-	// file is the name under testdata/captures, without the .gz.
-	file string
-
-	// url is the address the page was fetched from, which is the requested url
-	// and not the effective one.
-	url string
-
-	// record is which extractor reads this page: work, journal, book, series,
-	// volumes, metrics, figure or table. It is a separate column from kind
-	// because a work page has both, and every other page has a record and no
-	// work type at all.
-	record string
-
-	// kind is the work type the record should carry, on a work page only.
-	kind string
-}
-
-var captures = []capture{
-	{"article_oa.html", "https://link.springer.com/article/10.1007/s10994-021-05946-3", "work", "article"},
-	{"article_subscription.html", "https://link.springer.com/article/10.1007/s10994-024-06594-z", "work", "article"},
-	{"chapter.html", "https://link.springer.com/chapter/10.1007/978-3-031-28170-9_6", "work", "chapter"},
-	{"protocol.html", "https://link.springer.com/protocol/10.1007/978-1-0716-2067-0_1", "work", "protocol"},
-	{"referenceworkentry.html", "https://link.springer.com/referenceworkentry/10.1007/978-3-642-27737-5_100-2", "work", "entry"},
-	{"book.html", "https://link.springer.com/book/10.1007/978-3-031-28170-9", "book", ""},
-	{"journal.html", "https://link.springer.com/journal/10994", "journal", ""},
-	{"series.html", "https://link.springer.com/series/558", "series", ""},
-	{"volumes.html", "https://link.springer.com/journal/10994/volumes-and-issues", "volumes", ""},
-	{"metrics.html", "https://link.springer.com/article/10.1007/s10994-021-05946-3/metrics", "metrics", ""},
-	{"metrics_subscription.html", "https://link.springer.com/article/10.1007/s10994-024-06594-z/metrics", "metrics", ""},
-	{"figure.html", "https://link.springer.com/article/10.1007/s10994-021-05946-3/figures/1", "figure", ""},
-	{"table.html", "https://link.springer.com/article/10.1007/s10994-021-05946-3/tables/1", "table", ""},
-	{"search.html", searchQueryURL, "search", ""},
-}
-
-// The query every search capture was taken with, html and rss alike, in the
-// same minute. It is one string so that the two paths cannot drift apart in the
-// testdata the way they did on the live site.
-const searchQuery = "query=aleatoric+uncertainty&content-type=Article&date=custom&dateFrom=2020&dateTo=2024&sortBy=relevance"
-
-const (
-	searchQueryURL = "https://link.springer.com/search?" + searchQuery
-	searchFeedURL  = "https://link.springer.com/search.rss?" + searchQuery
-)
+// The capture table, the search query and the two search urls moved to
+// ledger.go when spr verify started reading them, since a check that only ever
+// runs against frozen bytes can never say the site changed. What is left here
+// is the loader, which is the part only a test needs.
 
 // The feeds are kept out of the capture table above because that table drives
 // the ledger, and the ledger reads meta names, json-ld blocks, data-test
@@ -78,11 +38,11 @@ const (
 // is empty and carries nothing at all. Both empties are 200 ok and they are
 // four bytes apart in size, which is the whole argument for terminating on the
 // item count.
-var feeds = []capture{
-	{"search.rss", searchFeedURL, "feed", ""},
-	{"search_last.rss", searchFeedURL + "&page=28", "feed", ""},
-	{"search_null.rss", searchFeedURL + "&page=29", "feed", ""},
-	{"search_empty.rss", searchFeedURL + "&page=200", "feed", ""},
+var feeds = []Capture{
+	{"search.rss", SearchFeedURL, "feed", ""},
+	{"search_last.rss", SearchFeedURL + "&page=28", "feed", ""},
+	{"search_null.rss", SearchFeedURL + "&page=29", "feed", ""},
+	{"search_empty.rss", SearchFeedURL + "&page=200", "feed", ""},
 }
 
 // The sitemaps, kept out of the capture table for the same reason the feeds
@@ -96,7 +56,7 @@ var feeds = []capture{
 // sitemap-collections.xml and sitemap_book_series.xml are the two that are left
 // out: they are 3.7 MB between them, and they are one flat urlset each with
 // nothing in them that the other urlsets do not already exercise.
-var maps = []capture{
+var maps = []Capture{
 	{"sitemap_index.xml", Base + IndexPath, "sitemap", ""},
 	{"sitemap_day.xml", Base + "/sitemap-entries/sitemap_2020-01-01_1.xml", "sitemap", ""},
 	{"sitemap_year.xml", Base + "/sitemap-entries/sitemap_1850_1.xml", "sitemap", ""},
@@ -122,7 +82,7 @@ var maps = []capture{
 // json, both are what the host actually sends, and both exist so that the
 // handling of them is tested against bytes rather than against an assumption
 // about what a well behaved API returns.
-var indexes = []capture{
+var indexes = []Capture{
 	{"crossref_work.json", CrossrefBase + "/10.1007/s10994-021-05946-3", "crossref", ""},
 	{"crossref_query.json", "https://api.crossref.org/works?query", "crossref", ""},
 	{"crossref_facets.json", "https://api.crossref.org/works?facet", "crossref", ""},
@@ -137,7 +97,7 @@ var indexes = []capture{
 func capturedIndex(t *testing.T, file string) *Response {
 	t.Helper()
 	for _, c := range indexes {
-		if c.file == file {
+		if c.File == file {
 			return load(t, c)
 		}
 	}
@@ -152,23 +112,23 @@ var fetchedAt = time.Date(2026, 8, 18, 0, 0, 0, 0, time.UTC)
 
 // load reads one capture into a response of the shape the client would have
 // produced for it.
-func load(t *testing.T, c capture) *Response {
+func load(t *testing.T, c Capture) *Response {
 	t.Helper()
-	f, err := os.Open(filepath.Join("testdata", "captures", c.file+".gz"))
+	f, err := os.Open(filepath.Join("testdata", "captures", c.File+".gz"))
 	if err != nil {
-		t.Fatalf("capture %s: %v", c.file, err)
+		t.Fatalf("capture %s: %v", c.File, err)
 	}
 	defer func() { _ = f.Close() }()
 
 	gz, err := gzip.NewReader(f)
 	if err != nil {
-		t.Fatalf("capture %s: %v", c.file, err)
+		t.Fatalf("capture %s: %v", c.File, err)
 	}
 	defer func() { _ = gz.Close() }()
 
 	body, err := io.ReadAll(gz)
 	if err != nil {
-		t.Fatalf("capture %s: %v", c.file, err)
+		t.Fatalf("capture %s: %v", c.File, err)
 	}
 
 	// The feeds and the sitemaps are served as xml, the shops map as text/plain,
@@ -177,17 +137,17 @@ func load(t *testing.T, c capture) *Response {
 	// way the client would have.
 	kind := KindHTML
 	switch {
-	case strings.HasSuffix(c.file, ".json"):
+	case strings.HasSuffix(c.File, ".json"):
 		kind = KindJSON
-	case strings.HasSuffix(c.file, ".rss"),
-		strings.HasSuffix(c.file, ".xml"),
-		strings.HasSuffix(c.file, ".txt"):
+	case strings.HasSuffix(c.File, ".rss"),
+		strings.HasSuffix(c.File, ".xml"),
+		strings.HasSuffix(c.File, ".txt"):
 		kind = KindXML
 	}
 
 	return &Response{
-		URL:     c.url,
-		Final:   c.url,
+		URL:     c.URL,
+		Final:   c.URL,
 		Code:    200,
 		Body:    body,
 		Status:  Classify(200, nil, body, kind),
@@ -201,7 +161,7 @@ func load(t *testing.T, c capture) *Response {
 func capturedMap(t *testing.T, file string) *Response {
 	t.Helper()
 	for _, c := range maps {
-		if c.file == file {
+		if c.File == file {
 			return load(t, c)
 		}
 	}
@@ -213,7 +173,7 @@ func capturedMap(t *testing.T, file string) *Response {
 func capturedFeed(t *testing.T, file string) *Response {
 	t.Helper()
 	for _, c := range feeds {
-		if c.file == file {
+		if c.File == file {
 			return load(t, c)
 		}
 	}

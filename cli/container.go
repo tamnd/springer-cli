@@ -65,9 +65,13 @@ func journalCmd() *cobra.Command {
 			if err != nil {
 				return containerError(err, vresp.URL, "volumes and issues")
 			}
+			// The pointer is called volumes, so it counts volumes. Count() is
+			// the issue total, and filling this with it printed "volumes 348 of
+			// 348 held" six lines above "volumes (114), 348 issues", which is
+			// one page disagreeing with itself about which noun it is counting.
 			j.Volumes = &spr.Conn{
-				Loaded:     vols.Count(),
-				TotalCount: vols.Count(),
+				Loaded:     len(vols.Volumes),
+				TotalCount: len(vols.Volumes),
 				Complete:   true,
 				URL:        vresp.URL,
 			}

@@ -68,8 +68,8 @@ func TestConnSaysWhatIsHeld(t *testing.T) {
 		t.Errorf("an unread pointer printed as %q", unread)
 	}
 
-	whole := conn(spr.Conn{Loaded: 348, TotalCount: 348, Complete: true})
-	if !strings.Contains(whole, "348 of 348 held") || strings.Contains(whole, "more at") {
+	whole := conn(spr.Conn{Loaded: 114, TotalCount: 114, Complete: true})
+	if !strings.Contains(whole, "114 of 114 held") || strings.Contains(whole, "more at") {
 		t.Errorf("a complete collection printed as %q", whole)
 	}
 }

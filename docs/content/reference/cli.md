@@ -30,6 +30,7 @@ Run `spr <command> --help` for the full flag list on any command, and see [confi
 | `cited-by` | List the works that cite this one, which this site has no page for |
 | `api` | Query the Springer Nature API, which needs a key |
 | `extraction` | Print the extraction table: every field, the rung that answers it, and why |
+| `verify` | Read the ledger's pages again and say whether they still read the same |
 | `cache` | Show or clear the page cache |
 | `version` | Print the version, commit and build date |
 
@@ -744,6 +745,92 @@ The same field name means different things on different pages, so rows are quali
 Every container row is rung 3 or rung 4. A work page carries Highwire meta tags because Google Scholar reads them, and a journal, book or series home page carries no bibliographic vocabulary at all, so their fields come from Springer's own `data-test` region names or from a css class and a printed English label.
 
 The rung names are the ones a record's `via` field uses, so a name copied out of a record pastes straight back in here.
+
+## `spr verify`
+
+```
+spr verify [--live] [--vocab] [--capture <name>]
+```
+
+Reads the fourteen pages the capture ledger was measured from and says whether they still read the same. The ledger is a file in the repository that records, for each of those pages, how many meta tags and JSON-LD blocks it carried, which vocabularies it declared, whether its two access statements agreed, which fields came out set, which were looked for and not found, and how many `data-test` regions were left unread. This command produces that reading again and compares it.
+
+| Flag | What it does |
+| --- | --- |
+| `--live` | Refetch every page instead of reading the page cache |
+| `--vocab` | Print what each vocabulary claims about the facts more than one of them states |
+| `--capture` | Only these captures, by name, repeatable |
+
+```bash
+spr verify
+spr verify --live
+spr verify --capture article_oa --capture journal
+spr verify --vocab --capture article_oa
+spr verify --live -o json | jq '.[] | select(.verdict != "ok")'
+```
+
+```
+$ spr verify --capture article_oa --capture journal --capture search
+source     the page cache at /Users/apple/Library/Caches/spr
+ledger     14 captures recorded in the ledger this binary was built with
+
+ok          article_oa.html
+ok          journal.html
+ok          search.html
+
+3 ok
+```
+
+### Which pages it read
+
+The first line of every run says whether the reading came out of the page cache or off the live site, and every finding under it repeats the same thing. That is not padding. A cached page that has gone stale and a page that genuinely changed produce identical findings, and the only way to tell them apart is to know which one was read, at the moment you are reading the finding rather than by scrolling back up.
+
+The default reads the cache and makes no request at all. It also does not fall back: a page that is not in the cache is reported as unread rather than quietly fetched, because a run that says cache in its header and then fetches is a run whose header is a lie. `--no-cache` on its own is refused for the same reason, since it turns off the only thing a default run reads.
+
+`--live` refetches every page and writes what it read back into the cache, so the run after it compares against the bytes this one saw.
+
+### Verdicts
+
+| Verdict | What it means | Exit code |
+| --- | --- | --- |
+| `ok` | The reading matches the ledger | 0 |
+| `drift` | The count of unread regions moved and nothing else did | 0 |
+| `improvement` | A field came out set that was not set before | 7 |
+| `changed` | A vocabulary appeared or disappeared, or the two access statements stopped agreeing | 7 |
+| `regression` | A field that used to come out set no longer does | 7 |
+| `unread` | The page could not be read at all | 3 if nothing was readable |
+
+Three of those are worth explaining. An improvement fails, because a field arriving is a change to what this tool claims and somebody should record it deliberately rather than find it in a diff six weeks later. Drift never fails, because Springer shipping a component that this tool does not read is news about the site and not a bug here. And a regression is the only verdict that is definitely this tool's fault.
+
+Exit code 7 is `verify` and nothing else. It exists so that a scheduled job can alert on the site moving without having to tell that apart from a mistyped flag.
+
+### `--vocab`
+
+The other half of the same question. A work page states its title in Highwire and in Dublin Core, its DOI in Highwire and in PRISM, and whether it is free to read in a Highwire `access` tag and again in the JSON-LD `isAccessibleForFree`. Eleven bibliographic facts are stated by more than one vocabulary, the access statement makes a twelfth, and `--vocab` prints what each vocabulary said about each of them.
+
+```
+$ spr verify --vocab --capture article_oa
+source     the page cache at /Users/apple/Library/Caches/spr
+
+article_oa.html
+  agree     access       highwire:access="Yes"  jsonld:isAccessibleForFree="true"
+  agree     copyright    dc:dc.copyright="2021 The Author(s)"  prism:prism.copyright="2021 The Author(s)"
+  agree     doi          highwire:citation_doi="10.1007/s10994-021-05946-3"  prism:prism.doi="doi:10.1007/s10994-021-05946-3"
+  agree     first_page   highwire:citation_firstpage="457"  prism:prism.startingPage="457"
+  agree     issn         highwire:citation_issn="1573-0565"  prism:prism.issn="1573-0565"
+  agree     issue        highwire:citation_issue="3"  prism:prism.number="3"
+  agree     journal      highwire:citation_journal_title="Machine Learning"  prism:prism.publicationName="Machine Learning"
+  agree     language     dc:dc.language="En"  highwire:citation_language="en"
+  agree     last_page    highwire:citation_lastpage="506"  prism:prism.endingPage="506"
+  agree     rights_agent dc:dc.rightsAgent="journalpermissions@springernature.com"  prism:prism.rightsAgent="journalpermissions@springernature.com"
+  agree     title        dc:dc.title="Aleatoric and epistemic uncertainty in machine learning: an introduction to concepts and methods"  highwire:citation_title="Aleatoric and epistemic uncertainty in machine learning: an introduction to concepts and methods"
+  agree     volume       highwire:citation_volume="110"  prism:prism.volume="110"
+
+12 facts across 1 page, and every one of them agrees
+```
+
+Across all fourteen pages that is 75 facts and every one of them agrees, which is the finding. The agreements are printed rather than only the disagreements, because a report that prints nothing looks the same whether every vocabulary agreed or the check never ran.
+
+Two of those rows are comparisons and not string equality. `doi` agrees even though PRISM writes `doi:10.1007/...` and Highwire writes `10.1007/...`, and `language` agrees across `En` and `en`. The normalisation is per fact and it is in the source next to the fact it belongs to. A disagreement exits 7, because a page that contradicts itself is a page somebody has to read.
 
 ## `spr cache`
 

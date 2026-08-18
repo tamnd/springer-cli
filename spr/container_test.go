@@ -14,8 +14,8 @@ import (
 // it.
 func capturedResponse(t *testing.T, file string) *Response {
 	t.Helper()
-	for _, c := range captures {
-		if c.file == file {
+	for _, c := range Captures {
+		if c.File == file {
 			return load(t, c)
 		}
 	}
@@ -459,29 +459,29 @@ func TestContainerExtractorsRefuseTheWrongPage(t *testing.T) {
 // the one page on this site whose whole analytics payload is unreadable, and it
 // is also the one page that needs nothing from it.
 func TestBothAnalyticsFormsOnEveryPage(t *testing.T) {
-	for _, c := range captures {
+	for _, c := range Captures {
 		doc, err := parseDoc(load(t, c).Body)
 		if err != nil {
-			t.Fatalf("%s: %v", c.file, err)
+			t.Fatalf("%s: %v", c.File, err)
 		}
 		d := parseDataLayer(doc)
-		if c.record == "search" {
+		if c.Record == "search" {
 			if d.ok() {
-				t.Errorf("%s: the search page now carries an assignment form, which is worth reading", c.file)
+				t.Errorf("%s: the search page now carries an assignment form, which is worth reading", c.File)
 			}
 			if len(d.pushes) != 3 {
-				t.Errorf("%s: %d push blocks, want 3", c.file, len(d.pushes))
+				t.Errorf("%s: %d push blocks, want 3", c.File, len(d.pushes))
 			}
 			continue
 		}
 		if !d.ok() {
-			t.Errorf("%s: the assignment form did not parse", c.file)
+			t.Errorf("%s: the assignment form did not parse", c.File)
 		}
 		if d.broken != 0 {
-			t.Errorf("%s: %d assignment blocks did not parse", c.file, d.broken)
+			t.Errorf("%s: %d assignment blocks did not parse", c.File, d.broken)
 		}
 		if len(d.pushes) == 0 {
-			t.Errorf("%s: no push form was carried", c.file)
+			t.Errorf("%s: no push form was carried", c.File)
 		}
 	}
 }

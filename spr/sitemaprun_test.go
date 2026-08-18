@@ -29,9 +29,9 @@ func newMapServer(t *testing.T, broken ...string) *mapServer {
 	for _, p := range broken {
 		s.broken[p] = true
 	}
-	byPath := map[string]capture{}
+	byPath := map[string]Capture{}
 	for _, c := range maps {
-		byPath[strings.TrimPrefix(c.url, Base)] = c
+		byPath[strings.TrimPrefix(c.URL, Base)] = c
 	}
 	s.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.hits[r.URL.Path]++
@@ -44,7 +44,7 @@ func newMapServer(t *testing.T, broken ...string) *mapServer {
 			http.NotFound(w, r)
 			return
 		}
-		if strings.HasSuffix(c.file, ".txt") {
+		if strings.HasSuffix(c.File, ".txt") {
 			w.Header().Set("Content-Type", "text/plain")
 		} else {
 			w.Header().Set("Content-Type", "text/xml")

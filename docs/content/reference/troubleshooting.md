@@ -84,6 +84,26 @@ That is the design rather than a deduplication bug. A person with an ORCID and a
 
 `--merge` reads `--format json` and only that. It is the one form of the ten that holds every field of every node and edge, where the RDF forms drop the properties that have no standard term and the two xml forms number their nodes, so reading either of those back would return a smaller graph than was written without saying so.
 
+## `spr verify` says every page is unread
+
+It reads the page cache and the cache is empty, which is what a fresh install looks like. `spr verify --live` refetches all fourteen pages and writes them into the cache, so the run after it has something to read. The default deliberately does not fetch on a miss, because a run that says cache in its header and then goes to the network is a run whose header is wrong.
+
+## `spr verify` reports a regression on a page you have not touched
+
+Read the source line first. If it says the page cache, the cached copy may simply be old, and the site itself may not have moved at all. Run the same command with `--live` before changing any code. This is the exact mistake the command is built to make hard, which is why the source is repeated on every finding rather than printed once at the top.
+
+## `spr verify` exits 7 on an improvement
+
+That is deliberate. A field coming out set that was not set before is a change to what this tool claims, and it stays reported until somebody records it in the ledger with `go test ./spr -run TestCaptureLedger -update` and reads the diff. An improvement nobody noticed is how a tool ends up with two versions of what it promises.
+
+## `spr verify --no-cache` is refused
+
+`--no-cache` turns off the only thing a default run reads, so the two together ask for nothing. Use `--live`, which refetches. The two flags together are accepted and mean refetch and store nothing.
+
+## `--vocab` prints nothing for a page
+
+That page states no fact in more than one vocabulary, which is true of the search results page and of every container page. The cross-check needs two claims about one fact to have anything to compare, and a journal home page carries no bibliographic vocabulary at all.
+
 ## The binary is not on your PATH
 
 `go install` puts the binary in `$(go env GOPATH)/bin`, usually `~/go/bin`, and a release archive leaves it wherever you unpacked it. See [installation](/getting-started/installation/).
