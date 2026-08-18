@@ -89,6 +89,7 @@ type Work struct {
 	Sections  []Section `json:"sections,omitempty"`
 	BodyText  string    `json:"body_text,omitempty"`
 	Figures   []Figure  `json:"figures,omitempty"`
+	Tables    []Table   `json:"tables,omitempty"`
 	Equations int       `json:"equations,omitempty"`
 	Footnotes []string  `json:"footnotes,omitempty"`
 
@@ -182,11 +183,27 @@ type Section struct {
 // captions and the links are all there already, so the default costs nothing
 // and only the full resolution asset needs a request of its own.
 type Figure struct {
-	Label       string `json:"label,omitempty"`
-	Caption     string `json:"caption,omitempty"`
-	Description string `json:"description,omitempty"`
-	PageURL     string `json:"page_url,omitempty"`
-	Image       string `json:"image,omitempty"`
+	Label   string `json:"label,omitempty"`
+	Caption string `json:"caption,omitempty"`
+	Anchor  string `json:"anchor,omitempty"`
+	PageURL string `json:"page_url,omitempty"`
+	Image   string `json:"image,omitempty"`
+}
+
+// Table is one table as the article page announces it, which is a caption and a
+// link and nothing else.
+//
+// This is not the figure story with different nouns. A figure's image is on the
+// article page and the subpage only offers a larger rendition of it, so fetching
+// the subpage buys you resolution. A table's body is not on the article page at
+// all: the open access capture is 718 KB of html announcing one table and
+// containing zero table elements. So Table carries no rows, deliberately, and
+// PageURL is the only way to get them.
+type Table struct {
+	Label   string `json:"label,omitempty"`
+	Caption string `json:"caption,omitempty"`
+	Anchor  string `json:"anchor,omitempty"`
+	PageURL string `json:"page_url,omitempty"`
 }
 
 // Reference is one entry of the reference list.

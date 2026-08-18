@@ -19,6 +19,9 @@ Run `spr <command> --help` for the full flag list on any command, and see [confi
 | `journal` | Read one journal home page, and optionally its volumes and issues |
 | `book` | Read one book, proceedings volume or reference work |
 | `series` | Read one book series home page |
+| `metrics` | Read the accesses, citations and attention a work has drawn |
+| `figures` | List a work's figures, or read one at full size |
+| `tables` | List a work's tables, or read one in full |
 | `extraction` | Print the extraction table: every field, the rung that answers it, and why |
 | `cache` | Show or clear the page cache |
 | `version` | Print the version, commit and build date |
@@ -136,6 +139,151 @@ spr series -o json 558 | jq '.latest_titles[]'
 ```
 
 The books listed are the five the page shows out of many thousands, so the field is `latest_titles` and the pointer under it says how to reach the rest. Each card credits either authors or editors and the two are kept apart, read off the card's printed label rather than off its `itemprop`, which says `editor` on both.
+
+## `spr metrics`
+
+```
+spr metrics <doi, url or path> [flags]
+```
+
+Reads a work's `/metrics` subpage. A bare DOI goes straight to `/article/<doi>/metrics` rather than through the path search `spr work` does, because this subpage exists for articles: a chapter's `/metrics` answers 404, and one request that says so beats four that say the same thing.
+
+| Flag | Meaning |
+|---|---|
+| `--envelope` | Print the whole envelope |
+
+```bash
+spr metrics 10.1007/s10994-021-05946-3
+spr metrics -o json 10.1007/s10994-021-05946-3 | jq .altmetric.cohorts
+spr metrics -o json 10.1007/s10994-021-05946-3 | jq -r '.citations | "\(.count) per \(.source)"'
+```
+
+```console
+$ spr metrics 10.1007/s10994-021-05946-3
+title         Aleatoric and epistemic uncertainty in machine learning: an introduction to concepts and methods
+doi           10.1007/s10994-021-05946-3
+article       https://link.springer.com/article/10.1007/s10994-021-05946-3
+updated       2026-08-18 10:34 UTC
+accesses      134k, about 134,000, which the page calls an approximate count
+citations     1,906 per Dimensions
+attention     52
+details       https://link.altmetric.com/details/69076743
+  twitter     20 tweeters
+  blogs       3 blogs
+  news        2 news outlets
+  reddit      2 Redditors
+  mendeley    1,307 Mendeley
+  ranked      22,032nd of 474,090 tracked articles in all journals
+              95th percentile
+  ranked      1st of 29 tracked articles in Machine Learning
+              96th percentile
+
+mentions (5, the named coverage only)
+  Medium US
+    The importance of uncertainty model estimation in Artificial Intelligence
+    for business.
+    https://medium.com/@German_Alfaro/the-importance-of-uncertainty-model-estimation-in-artificial-intelligence-for-business-6fb305941327
+...
+```
+
+Three things in that output are decisions rather than formatting.
+
+The citation count carries its counter. `1,906 per Dimensions` is read off the page's own sentence, and if that sentence changes the record says the source is missing rather than letting the number pass as Springer's own. Crossref reports 1,553 for the same DOI and OpenAlex 1,563, and all three are correct about three different corpora.
+
+The rank comes with two cohorts and not one. The wide one compares this article to every tracked article of a similar age, the narrow one to the tracked articles of a similar age in its own journal, and on this page those are 474,090 articles and 29. Quoting `96th percentile` without the 29 behind it is how a percentile lies, so the size is printed on the same line as the rank.
+
+`mentions` is the named coverage and nothing else. Five cards here against a breakdown counting 1,334 pieces of attention: the 20 tweeters, the 2 Redditors and the 1,307 Mendeley readers are counted and never named. They are separate fields because reading `len(mentions)` as the total is wrong by three orders of magnitude.
+
+The counts are printed as the page prints them. `1 tweeters` is Springer's own text on an article with a single tweet, and correcting the grammar would mean this tool editing the publisher.
+
+## `spr figures`
+
+```
+spr figures <doi, url or path> [number] [flags]
+```
+
+With no number, lists what the article page already holds: every figure's label, its caption and the address of its own page. That is the same single request `spr work` makes.
+
+With a number, fetches that figure's page. The only thing it buys you is the asset. The article page serves the image at 685 pixels wide and the figure page serves the same asset at 1,177, under a path that differs by one segment, and the path is read rather than built because guessing a CDN's naming scheme works right up until it does not.
+
+| Flag | Meaning |
+|---|---|
+| `--envelope` | Print the whole envelope |
+
+```bash
+spr figures 10.1007/s10994-021-05946-3
+spr figures 10.1007/s10994-021-05946-3 1
+spr figures -o json 10.1007/s10994-021-05946-3 1 | jq .image
+```
+
+```console
+$ spr figures 10.1007/s10994-021-05946-3 1
+label         Fig. 1
+in            Aleatoric and epistemic uncertainty in machine learning: an introduction to concepts and methods
+article       https://link.springer.com/article/10.1007/s10994-021-05946-3#Fig1
+image         https://media.springernature.com/full/springer-static/image/art%3A10.1007%2Fs10994-021-05946-3/MediaObjects/10994_2021_5946_Fig1_HTML.jpg
+size          1177 by 420
+webp          https://media.springernature.com/full/springer-static/image/art%3A10.1007%2Fs10994-021-05946-3/MediaObjects/10994_2021_5946_Fig1_HTML.jpg?as=webp
+alt           Fig. 1
+
+caption
+  Predictions by EfficientNet (Tan and Le 2019) on test images from ImageNet:
+  For the left image, the neural network predicts “typewriter keyboard”
+  with certainty 83.14 %, for the right image “stone wall” with certainty
+  87.63 %
+
+cited in the caption (1)
+  Tan, M., & Le, Q. (2019). EfficientNet: Rethinking model scaling for
+  convolutional neural networks. In Proceedings of ICML, 36th international
+  conference on machine learning, Long Beach, California.
+  https://link.springer.com/article/10.1007/s10994-021-05946-3#ref-CR105
+```
+
+The caption cites a work, the printed link text is only the year, and the whole reference string sits in the anchor's `title` attribute. Both are kept, so a caption citation is resolvable without a second pass over the reference list.
+
+A number past the end is not a 404. On an article with 17 figures, `/figures/99` answers 200 with 224 KB of page furniture and an empty body, which means the fetch looks healthy and the page is empty. This command says there is no such figure rather than printing a record with nothing in it.
+
+## `spr tables`
+
+```
+spr tables <doi, url or path> [number] [flags]
+```
+
+With no number, lists the label, caption and link per table, which is genuinely everything the article page knows.
+
+With a number, fetches the table. This is the one subpage in this tool that is not an optimization. The open access capture is 718 KB of HTML, it announces one table, and it contains zero `<table>` elements. The rows are published on `/tables/N` and nowhere else, so a pipeline that reads the article page and expects to find tabular data finds none of it and no error either.
+
+| Flag | Meaning |
+|---|---|
+| `--envelope` | Print the whole envelope |
+
+```bash
+spr tables 10.1007/s10994-021-05946-3
+spr tables 10.1007/s10994-021-05946-3 1
+spr tables -o json 10.1007/s10994-021-05946-3 1 | jq -r '.rows[] | @tsv'
+```
+
+```console
+$ spr tables 10.1007/s10994-021-05946-3 1
+label         Table 1
+in            Aleatoric and epistemic uncertainty in machine learning: an introduction to concepts and methods
+article       https://link.springer.com/article/10.1007/s10994-021-05946-3#Tab1
+
+caption
+  Notation used throughout the paper
+
+14 rows, 2 columns
+Notation	Meaning
+\(P\), \(p\)	Probability measure, density or mass function
+\({\mathcal{X}}\), \({{\varvec{x}}}\), \({{\varvec{x}}}_i\)	Instance space, instance
+...
+```
+
+Rows go out tab separated rather than aligned into columns. A cell here holds LaTeX and can be far wider than a terminal, so aligning would either wrap the table into nonsense or truncate the data, and tabs are what the next program in the pipe wants anyway.
+
+Cells keep the LaTeX the publisher wrote. Rendering `\({\mathcal{X}}\)` into anything else would be this tool having an opinion about notation, and anyone who wants it rendered has a renderer.
+
+The heading on this page is one string with the label and the caption run together, `Table 1 Notation used throughout the paper`, where a figure gives them two separate elements. They are split on the label so that a caption is a caption on both records.
 
 ## `spr extraction`
 

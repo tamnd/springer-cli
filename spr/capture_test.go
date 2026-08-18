@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-// The captures are nine real pages, fetched on 2026-08-18, stored gzipped.
+// The captures are thirteen real pages, fetched on 2026-08-18, stored gzipped.
 //
-// Gzipped because the nine of them are 3.2 MB of html and 670 KB compressed,
+// Gzipped because the thirteen of them are 4.2 MB of html and 883 KB compressed,
 // and a repository carries its testdata forever. They are otherwise untouched
 // except for one substitution: the per request uuid in
 // ?error=cookies_not_supported&code=<uuid> is replaced with a run of zeroes, so
@@ -27,9 +27,10 @@ type capture struct {
 	// and not the effective one.
 	url string
 
-	// record is which extractor reads this page: work, journal, book, series or
-	// volumes. It is a separate column from kind because a work page has both,
-	// and a container page has a record and no work type at all.
+	// record is which extractor reads this page: work, journal, book, series,
+	// volumes, metrics, figure or table. It is a separate column from kind
+	// because a work page has both, and every other page has a record and no
+	// work type at all.
 	record string
 
 	// kind is the work type the record should carry, on a work page only.
@@ -46,6 +47,10 @@ var captures = []capture{
 	{"journal.html", "https://link.springer.com/journal/10994", "journal", ""},
 	{"series.html", "https://link.springer.com/series/558", "series", ""},
 	{"volumes.html", "https://link.springer.com/journal/10994/volumes-and-issues", "volumes", ""},
+	{"metrics.html", "https://link.springer.com/article/10.1007/s10994-021-05946-3/metrics", "metrics", ""},
+	{"metrics_subscription.html", "https://link.springer.com/article/10.1007/s10994-024-06594-z/metrics", "metrics", ""},
+	{"figure.html", "https://link.springer.com/article/10.1007/s10994-021-05946-3/figures/1", "figure", ""},
+	{"table.html", "https://link.springer.com/article/10.1007/s10994-021-05946-3/tables/1", "table", ""},
 }
 
 // fetchedAt is the moment the captures were taken. The extractor stamps the

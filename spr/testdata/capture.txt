@@ -1,6 +1,6 @@
 # The capture ledger.
 #
-# Nine real pages across five record types, fetched 2026-08-18, extracted by the current code.
+# Thirteen real pages across eight record types, fetched 2026-08-18, extracted by the current code.
 #
 # Fewer fields set or more missed is a regression and fails. More fields set is an improvement
 # and also fails, until this file is updated, so that an improvement is always a reviewed change.
@@ -23,8 +23,8 @@ article_oa.html
   data-test    54
   datalayer    1 assigned, 1 pushed, 0 broken
   access       agree
-  unread       50
-  set          abstract access access.world_readable api_url article_type authors body_text container_abbrev container_title copyright corresponding cover_date doi equations figures first_page footnotes fulltext_url issn issue keywords language last_page license modified online pages pdf_url published publisher rails ref_links references rights rights_agent section_label sections subjects title volume
+  unread       46
+  set          abstract access access.world_readable api_url article_type authors body_text container_abbrev container_title copyright corresponding cover_date doi equations figures first_page footnotes fulltext_url issn issue keywords language last_page license modified online pages pdf_url published publisher rails ref_links references rights rights_agent section_label sections subjects tables title volume
 
 article_subscription.html
   record       work
@@ -34,8 +34,8 @@ article_subscription.html
   data-test    53
   datalayer    1 assigned, 1 pushed, 0 broken
   access       agree
-  unread       49
-  set          abstract access access.world_readable api_url article_type authors body_text container_abbrev container_title copyright corresponding cover_date doi equations figures first_page footnotes fulltext_url issn issue keywords language last_page modified online pages pdf_url published publisher rails ref_links references rights rights_agent section_label sections subjects title volume
+  unread       45
+  set          abstract access access.world_readable api_url article_type authors body_text container_abbrev container_title copyright corresponding cover_date doi equations figures first_page footnotes fulltext_url issn issue keywords language last_page modified online pages pdf_url published publisher rails ref_links references rights rights_agent section_label sections subjects tables title volume
 
 chapter.html
   record       work
@@ -117,3 +117,47 @@ volumes.html
   access       neither
   unread       29
   set          journal volumes
+
+metrics.html
+  record       metrics
+  meta names   66
+  json-ld      1
+  vocabularies highwire+dc+prism
+  data-test    20
+  datalayer    1 assigned, 1 pushed, 0 broken
+  access       agree
+  unread       14
+  set          accesses altmetric altmetric_breakdown altmetric_cohorts article_url citations citations_source doi mentions title updated
+
+metrics_subscription.html
+  record       metrics
+  meta names   66
+  json-ld      1
+  vocabularies highwire+dc+prism
+  data-test    19
+  datalayer    1 assigned, 1 pushed, 0 broken
+  access       agree
+  unread       14
+  set          accesses altmetric altmetric_breakdown altmetric_cohorts article_url citations citations_source doi title updated
+
+figure.html
+  record       figure
+  meta names   66
+  json-ld      1
+  vocabularies highwire+dc+prism
+  data-test    19
+  datalayer    1 assigned, 1 pushed, 0 broken
+  access       agree
+  unread       13
+  set          article_title article_url caption image label refs
+
+table.html
+  record       table
+  meta names   66
+  json-ld      1
+  vocabularies highwire+dc+prism
+  data-test    14
+  datalayer    1 assigned, 1 pushed, 0 broken
+  access       agree
+  unread       13
+  set          article_title article_url caption label rows

@@ -15,8 +15,8 @@ import (
 // testdata/capture.txt records, per capture, which fields the extractor set,
 // which it named as missed, how many regions it left unread, and the site
 // specific signals. TestCaptureLedger runs the right extractor over each of the
-// nine captures, five records between them, and compares. The comparison has
-// three outcomes and they are deliberately not the same:
+// thirteen captures, eight records between them, and compares. The comparison
+// has three outcomes and they are deliberately not the same:
 //
 //   - Fewer fields set, or more missed. A regression. Fails.
 //   - More fields set. An improvement, and it fails until the ledger is
@@ -74,7 +74,7 @@ func report(t *testing.T, c capture) ledgerEntry {
 	}
 
 	// The access declaration is stated twice on a work page, once in Highwire
-	// and once in schema.org. They agreed on all nine captures, which is the
+	// and once in schema.org. They agreed on all thirteen captures, which is the
 	// reason a disagreement is worth watching for.
 	e.agreed = accessAgreement(meta, ld)
 
@@ -141,6 +141,24 @@ func extractCapture(resp *Response, c capture) (Envelope, error) {
 			return Envelope{}, err
 		}
 		return v.Envelope, nil
+	case "metrics":
+		m, err := ExtractMetrics(resp)
+		if err != nil {
+			return Envelope{}, err
+		}
+		return m.Envelope, nil
+	case "figure":
+		f, err := ExtractFigure(resp)
+		if err != nil {
+			return Envelope{}, err
+		}
+		return f.Envelope, nil
+	case "table":
+		t, err := ExtractTable(resp)
+		if err != nil {
+			return Envelope{}, err
+		}
+		return t.Envelope, nil
 	}
 	return Envelope{}, fmt.Errorf("no extractor is registered for record %q", c.record)
 }
@@ -331,7 +349,7 @@ func diff(a, b []string) (gained, lost []string) {
 
 const ledgerHeader = `# The capture ledger.
 #
-# Nine real pages across five record types, fetched 2026-08-18, extracted by the current code.
+# Thirteen real pages across eight record types, fetched 2026-08-18, extracted by the current code.
 #
 # Fewer fields set or more missed is a regression and fails. More fields set is an improvement
 # and also fails, until this file is updated, so that an improvement is always a reviewed change.

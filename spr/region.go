@@ -66,6 +66,33 @@ func (r *regions) first(test string) *html.Node {
 	return nil
 }
 
+// firstIn returns the first node with this data-test value inside one subtree,
+// and marks the name read.
+//
+// It exists for regions that repeat, where the document order index would hand
+// back the first one on the page rather than the one belonging to the row being
+// read. An article with three tables has three table-caption regions and three
+// table-link regions, and pairing them by position would be right until a table
+// shipped without a link.
+func (r *regions) firstIn(root *html.Node, test string) *html.Node {
+	r.read[test] = true
+	if root == nil {
+		return nil
+	}
+	var found *html.Node
+	walk(root, func(n *html.Node) bool {
+		if found != nil {
+			return false
+		}
+		if attr(n, "data-test") == test {
+			found = n
+			return false
+		}
+		return true
+	})
+	return found
+}
+
 // text returns the collapsed text of the first node with this data-test value.
 func (r *regions) text(test string) string {
 	return text(r.first(test))

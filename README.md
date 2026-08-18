@@ -72,6 +72,33 @@ via
 
 Absent means absent. A field the page did not carry is left out rather than emitted as null, a field that was looked for and did not arrive is named in `missed` with the reason, and the regions nobody read are listed rather than quietly dropped, so a record never looks more complete than it is.
 
+## A number without its counter is not a fact
+
+`spr metrics` reads the one page that says how often a work was read and cited, and it never hands back a bare integer:
+
+```console
+$ spr metrics 10.1007/s10994-021-05946-3
+accesses      134k, about 134,000, which the page calls an approximate count
+citations     1,906 per Dimensions
+attention     52
+  ranked      22,032nd of 474,090 tracked articles in all journals
+              95th percentile
+  ranked      1st of 29 tracked articles in Machine Learning
+              96th percentile
+```
+
+Springer says 1,906 citations for that DOI, Crossref says 1,553 and OpenAlex says 1,563. All three are right about three different corpora, so `Dimensions` is read off the page's own sentence and travels with the number. The rank arrives with two cohorts and both are kept, because 96th percentile of 29 tracked articles and 95th percentile of 474,090 are not the same claim and the sizes are the only thing that says so.
+
+The same page counts 1,334 pieces of attention and names five of them. Those are two fields, `breakdown` and `mentions`, because reading `len(mentions)` as the total would be wrong by three orders of magnitude.
+
+## The rows of a table are not on the article page
+
+`spr figures` and `spr tables` look like a matched pair and are not.
+
+The article page carries every figure inline, so listing them costs nothing and asking for one buys resolution: 685 pixels wide on the article, 1177 on `/figures/1`, and the tool reads the second url off the page rather than rewriting the first.
+
+The article page carries no tables at all. The open access capture is 718 KB of html which announces one table, links to it, and contains zero `<table>` elements. So `spr work -o json` gives you a `tables` array of captions and links with no rows in it, deliberately, and `spr tables <doi> 1` is the only way to read one.
+
 ## Install
 
 ```bash
@@ -95,6 +122,10 @@ spr journal 10994 --volumes                     # 114 volumes and 348 issues
 spr book 978-3-031-28170-9                      # a book, by isbn or by doi
 spr book --chapters 10.1007/978-3-031-28170-9
 spr series 558                                  # a book series
+spr metrics 10.1007/s10994-021-05946-3          # accesses, citations and attention
+spr figures 10.1007/s10994-021-05946-3          # the figure list, off the article page
+spr figures 10.1007/s10994-021-05946-3 1        # one figure at full resolution
+spr tables 10.1007/s10994-021-05946-3 1         # one table, rows and all
 spr extraction                                  # the field table: rung, source, reason
 spr extraction authors
 spr extraction journal.title
@@ -154,7 +185,7 @@ make fmt
 
 ## Status
 
-Building towards [v0.1.0](https://github.com/tamnd/springer-cli/issues/2). The client, its classifier, the identifiers, the work record and the container records are in; subpages, search, sitemaps, the open indexes and the graph follow.
+Building towards [v0.1.0](https://github.com/tamnd/springer-cli/issues/2). The client, its classifier, the identifiers, the work record, the container records and the subpages are in; search, sitemaps, the open indexes and the graph follow.
 
 ## License
 
