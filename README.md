@@ -134,6 +134,23 @@ Three hosts, four numbers, one work. Springer's metrics page says 1,906 citation
 
 `spr search --also crossref --also openalex` asks the indexes the same question the site was asked and merges the answers on the normalized DOI, which is the only key the three sources agree on. 557 results from Springer against 213,566 matches at Crossref is a fact about the query that neither set shows on its own, so the backend totals go to stderr where they cannot be mistaken for a count of what came back.
 
+## A name is not an identifier
+
+`spr graph` turns those records into nodes and edges, and the only hard question in it is who is who. Scholarly publishing solved naming in the 1990s and Springer prints the results in the page head, so this tool mints no identifier for anything that already has one. The problem is the other half: four authorities are in play and the job is keeping them from being quietly conflated.
+
+Every node's uri names the authority that identified it. The measured article has two authors and one of them registered an ORCID:
+
+```
+spr:person/orcid/0000-0002-9944-4108                    Eyke Hüllermeier    via orcid
+spr:person/name/d58cff045d1d56f7215ff4a315b4fb70ee0…    Willem Waegeman     via name
+```
+
+One of those can be joined to any other graph in the world. The other is a hash of a name string on one page, is worth exactly what a name string is worth, and this tool will not join it to anything on its own. There is no third case and no confidence score. `--merge-names` merges a name into an ORCID when the name matches exactly one, refuses when two ORCIDs answer to the same name, and writes `mergedFrom` on the survivor so the guess is a fact in the output rather than a decision buried in it.
+
+The same rule kills citation edges. The article page prints 122 references and states a DOI for none of them, so the html tier produces zero `cites` edges, not weak ones. `--also crossref` reads the deposit and turns 66 of the same 122 into edges, and both counts are printed, because a graph that quietly has 66 edges where the paper has 122 references is a graph that lies by omission.
+
+Ten output formats, of which four are RDF, and the vocabulary is borrowed from schema.org, Dublin Core, PRISM, BIBO, FaBiO, CiTO and FRAPO down to exactly four local terms. Holding that budget is why the four containment edges share `dcterms:isPartOf` and are told apart by the object's `rdf:type`, and why ordered authorship is a plain `rdf:List` rather than a reified position. Under `--format nq` the fourth term is the tier, so a store can be asked what the html alone said, and dropping that column leaves valid N-Triples.
+
 ## Install
 
 ```bash
@@ -169,6 +186,10 @@ spr sitemap                                     # the shape of the whole site, o
 spr sitemap --static journals                   # every journal there is, three requests
 spr sitemap --kind article --since 2026-08-01   # urls, one per line, ready to pipe
 spr sitemap --all --yes --resume > urls.txt     # 10,408 shards, resumable
+spr graph 10.1007/s10994-021-05946-3            # nodes and edges instead of records
+spr graph 10.1007/s10994-021-05946-3 --also crossref --format ttl
+spr graph 10994 --depth 1 --dry-run             # billed per depth before it walks
+spr graph --merge monday.json --merge tuesday.json > both.json
 spr crossref 10.1007/s10994-021-05946-3         # what the publisher deposited
 spr crossref 10.1007/s10994-021-05946-3 --references
 spr crossref --issn 0885-6125 --from 2024 --rows 100
@@ -236,7 +257,7 @@ make fmt
 
 ## Status
 
-Building towards [v0.1.0](https://github.com/tamnd/springer-cli/issues/2). The client, its classifier, the identifiers, the work record, the container records, the subpages, search, the sitemaps and the open indexes are in; the graph follows.
+Building towards [v0.1.0](https://github.com/tamnd/springer-cli/issues/2). The client, its classifier, the identifiers, the work record, the container records, the subpages, search, the sitemaps, the open indexes and the graph are in; the docs, the captures and the release follow.
 
 ## License
 

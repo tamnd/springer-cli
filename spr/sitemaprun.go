@@ -342,11 +342,18 @@ func ResumeKey(parts ...string) string {
 
 // OpenResume opens the state file for a selection, reading what an earlier run
 // finished and opening the file to append what this one finishes.
-func OpenResume(dir, key string) (*Resume, error) {
+func OpenResume(dir, key string) (*Resume, error) { return openResumeIn(dir, "sitemap", key) }
+
+// OpenGraphResume is the same file for a graph walk, kept in its own directory
+// so that a resumed sitemap walk and a resumed graph walk cannot collide on a
+// key. The two record different things about different urls.
+func OpenGraphResume(dir, key string) (*Resume, error) { return openResumeIn(dir, "graph", key) }
+
+func openResumeIn(dir, sub, key string) (*Resume, error) {
 	if dir == "" {
 		return nil, errors.New("resuming needs a cache directory, and --no-cache turned it off")
 	}
-	path := filepath.Join(dir, "sitemap", key+".resume")
+	path := filepath.Join(dir, sub, key+".resume")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
